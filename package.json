@@ -1,0 +1,19 @@
+{
+  "name": "career-predictor",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Career Development Predictor with Job Search",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "check": "node --check server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "coze-coding-dev-sdk": "^0.7.32",
+    "express": "^5.2.1"
+  }
+}

@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>岗位智能匹配 - 职业发展预测师</title>
+  <meta name="description" content="从全网搜索岗位JD，智能匹配你的软硬实力，找到最适合你的工作机会">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.cn">
+  <link rel="preconnect" href="https://fonts.gstatic.cn" crossorigin>
+  <link href="https://fonts.googleapis.cn/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config={theme:{extend:{fontFamily:{sans:['Inter','-apple-system','PingFang SC','Microsoft YaHei','sans-serif']},colors:{primary:{50:'#EEF2FF',100:'#E0E7FF',200:'#C7D2FE',300:'#A5B4FC',400:'#818CF8',500:'#6366F1',600:'#4F46E5',700:'#4338CA'},accent:{400:'#2DD4BF',500:'#14B8A6',600:'#0D9488'},warm:{50:'#FAFAF9',100:'#F5F5F4'}},animation:{'pulse-soft':'pulseSoft 2s ease-in-out infinite','shimmer':'shimmer 2s linear infinite','fade-up':'fadeUp 0.4s ease-out'},keyframes:{pulseSoft:{'0%,100%':{opacity:'1'},'50%':{opacity:'0.7'}},shimmer:{'0%':{backgroundPosition:'-200% 0'},'100%':{backgroundPosition:'200% 0'}},fadeUp:{'0%':{opacity:'0',transform:'translateY(16px)'},'100%':{opacity:'1',transform:'translateY(0)'}}}}}}
+  </script>
+  <style>
+    *{box-sizing:border-box}
+    body{background:#FAFAF9;color:#1E293B;font-family:'Inter',-apple-system,'PingFang SC','Microsoft YaHei',sans-serif}
+    .gradient-bg{background:linear-gradient(135deg,#4F46E5 0%,#7C3AED 100%)}
+    .gradient-text{background:linear-gradient(135deg,#4F46E5,#7C3AED);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .card{background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.06),0 1px 2px rgba(0,0,0,0.04);transition:all 0.3s ease}
+    .card:hover{transform:translateY(-2px);box-shadow:0 8px 25px rgba(79,70,229,0.1),0 4px 10px rgba(0,0,0,0.05)}
+    .card-flat{background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.06),0 1px 2px rgba(0,0,0,0.04)}
+    .btn-primary{background:linear-gradient(135deg,#4F46E5,#7C3AED);color:#fff;border:none;border-radius:10px;padding:12px 28px;font-weight:600;cursor:pointer;transition:all 0.3s ease}
+    .btn-primary:hover{filter:brightness(1.1);transform:translateY(-1px);box-shadow:0 4px 15px rgba(79,70,229,0.3)}
+    .btn-primary:disabled{opacity:0.5;cursor:not-allowed;filter:none;transform:none}
+    .btn-secondary{background:#fff;color:#4F46E5;border:2px solid #E0E7FF;border-radius:10px;padding:10px 24px;font-weight:600;cursor:pointer;transition:all 0.3s ease}
+    .btn-secondary:hover{border-color:#4F46E5;background:#EEF2FF}
+    .tag{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500}
+    .tag-primary{background:#EEF2FF;color:#4F46E5}
+    .tag-accent{background:#F0FDFA;color:#0D9488}
+    .tag-warn{background:#FFFBEB;color:#D97706}
+    .tag-success{background:#ECFDF5;color:#059669}
+    .tag-red{background:#FEF2F2;color:#DC2626}
+    .match-bar{height:8px;background:#E2E8F0;border-radius:8px;overflow:hidden}
+    .match-bar .fill{height:100%;border-radius:8px;transition:width 0.8s ease}
+    textarea,input[type="text"]{border:2px solid #E2E8F0;border-radius:10px;padding:12px 16px;width:100%;font-size:14px;transition:border-color 0.2s;outline:none;font-family:inherit;resize:vertical}
+    textarea:focus,input[type="text"]:focus{border-color:#A5B4FC}
+    .job-card{border:2px solid #E2E8F0;border-radius:12px;padding:20px;transition:all 0.3s ease;cursor:pointer}
+    .job-card:hover{border-color:#A5B4FC;box-shadow:0 4px 15px rgba(79,70,229,0.08)}
+    .job-card.expanded{border-color:#4F46E5;background:#FAFAF9}
+    .skeleton{background:linear-gradient(90deg,#E2E8F0 25%,#F1F5F9 50%,#E2E8F0 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:8px;height:20px}
+    .skill-badge{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:8px;font-size:12px;font-weight:500}
+    .skill-matched{background:#ECFDF5;color:#059669;border:1px solid #A7F3D0}
+    .skill-gap{background:#FEF2F2;color:#DC2626;border:1px solid #FECACA}
+    .skill-neutral{background:#F1F5F9;color:#64748B;border:1px solid #E2E8F0}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+    .animate-fade-up{animation:fadeUp 0.4s ease-out}
+    .loading-spinner{width:40px;height:40px;border:3px solid #E2E8F0;border-top-color:#4F46E5;border-radius:50%;animation:spin 0.8s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .source-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:6px;font-size:11px;background:#F1F5F9;color:#64748B}
+    .tab-btn{padding:8px 20px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:all 0.2s}
+    .tab-btn.active{background:linear-gradient(135deg,#4F46E5,#7C3AED);color:#fff}
+    .tab-btn:not(.active){background:#fff;color:#64748B;border:1px solid #E2E8F0}
+    .tab-btn:not(.active):hover{border-color:#A5B4FC;color:#4F46E5}
+  </style>
+</head>
+<body class="min-h-screen">
+  <!-- Header -->
+  <header class="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100 shadow-sm">
+    <div class="max-w-6xl mx-auto px-4 py-3">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <a href="index.html" class="flex items-center gap-2 hover:opacity-80 transition">
+            <div class="w-8 h-8 gradient-bg rounded-lg flex items-center justify-center">
+              <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+            </div>
+            <span class="font-bold text-sm gradient-text">职业发展预测师</span>
+          </a>
+          <span class="text-slate-300">|</span>
+          <span class="text-sm font-medium text-slate-600">岗位智能匹配</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <div id="profileBadge" class="hidden items-center gap-2 bg-primary-50 rounded-full px-3 py-1">
+            <svg class="w-4 h-4 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <span class="text-xs text-primary-600 font-medium">已导入能力档案</span>
+          </div>
+          <a href="index.html" class="btn-secondary text-sm py-1.5 px-4">返回测评</a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 py-6">
+    <!-- Profile Import Banner -->
+    <div id="importBanner" class="card-flat p-5 mb-6 border-2 border-dashed border-primary-200 bg-primary-50/30">
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 class="font-semibold text-sm text-primary-700 mb-1">导入你的能力档案</h3>
+          <p class="text-xs text-slate-500">如果你已完成「职业发展预测师」的测评，可以一键导入你的软硬实力数据，让匹配更精准。</p>
+        </div>
+        <button onclick="importProfile()" class="btn-primary text-sm py-2 px-4 flex-shrink-0">一键导入</button>
+      </div>
+      <div id="importedInfo" class="hidden mt-3 pt-3 border-t border-primary-100">
+        <div class="flex flex-wrap gap-2" id="importedTags"></div>
+      </div>
+    </div>
+
+    <!-- Search Section -->
+    <div class="card-flat p-6 mb-6">
+      <h2 class="text-xl font-bold mb-4">搜索匹配的岗位</h2>
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
+        <div class="md:col-span-5">
+          <label class="text-xs font-medium text-slate-500 mb-1 block">岗位关键词</label>
+          <input type="text" id="searchQuery" placeholder="如：产品经理、前端开发、数据分析师...">
+        </div>
+        <div class="md:col-span-3">
+          <label class="text-xs font-medium text-slate-500 mb-1 block">城市（可选）</label>
+          <input type="text" id="searchLocation" placeholder="如：北京、上海、深圳...">
+        </div>
+        <div class="md:col-span-2">
+          <label class="text-xs font-medium text-slate-500 mb-1 block">结果数量</label>
+          <select id="searchCount" class="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:border-primary-400 outline-none">
+            <option value="6">6 条</option>
+            <option value="10" selected>10 条</option>
+            <option value="15">15 条</option>
+          </select>
+        </div>
+        <div class="md:col-span-2 flex items-end">
+          <button onclick="searchJobs()" id="searchBtn" class="btn-primary w-full py-2.5">
+            <span id="searchBtnText">搜索岗位</span>
+          </button>
+        </div>
+      </div>
+      <!-- Quick search tags -->
+      <div class="flex flex-wrap gap-2 mt-3">
+        <span class="text-xs text-slate-400">热门搜索：</span>
+        <button onclick="quickSearch('产品经理')" class="text-xs bg-primary-50 text-primary-600 rounded-full px-3 py-1 hover:bg-primary-100 transition">产品经理</button>
+        <button onclick="quickSearch('前端开发工程师')" class="text-xs bg-primary-50 text-primary-600 rounded-full px-3 py-1 hover:bg-primary-100 transition">前端开发</button>
+        <button onclick="quickSearch('数据分析师')" class="text-xs bg-primary-50 text-primary-600 rounded-full px-3 py-1 hover:bg-primary-100 transition">数据分析师</button>
+        <button onclick="quickSearch('运营专员')" class="text-xs bg-primary-50 text-primary-600 rounded-full px-3 py-1 hover:bg-primary-100 transition">运营专员</button>
+        <button onclick="quickSearch('UI设计师')" class="text-xs bg-primary-50 text-primary-600 rounded-full px-3 py-1 hover:bg-primary-100 transition">UI设计师</button>
+        <button onclick="quickSearch('人力资源')" class="text-xs bg-primary-50 text-primary-600 rounded-full px-3 py-1 hover:bg-primary-100 transition">人力资源</button>
+      </div>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loadingState" class="hidden text-center py-16">
+      <div class="loading-spinner mx-auto mb-4"></div>
+      <p class="text-slate-500 text-sm">正在从招聘网站搜索岗位信息...</p>
+      <p class="text-slate-400 text-xs mt-1">数据来源：Boss直聘、拉勾、猎聘等</p>
+    </div>
+
+    <!-- Results Section -->
+    <div id="resultsSection" class="hidden">
+      <!-- Results Header -->
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h3 class="font-bold text-lg">搜索结果</h3>
+          <p class="text-xs text-slate-400" id="resultsSummary"></p>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="sortResults('match')" class="tab-btn active text-xs py-1.5 px-3" id="sortMatch">按匹配度</button>
+          <button onclick="sortResults('latest')" class="tab-btn text-xs py-1.5 px-3" id="sortLatest">按最新</button>
+        </div>
+      </div>
+
+      <!-- Match Overview Chart -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6" id="overviewCards"></div>
+
+      <!-- Job List -->
+      <div id="jobList" class="space-y-4"></div>
+
+      <!-- Manual JD Input -->
+      <div class="card-flat p-6 mt-6">
+        <h3 class="font-semibold mb-3">手动粘贴 JD</h3>
+        <p class="text-xs text-slate-400 mb-3">如果搜索结果不理想，你也可以直接粘贴目标岗位的 JD 进行匹配分析。</p>
+        <textarea id="manualJD" rows="6" placeholder="粘贴完整的岗位描述（JD）..."></textarea>
+        <button onclick="analyzeManualJD()" class="btn-primary mt-3 text-sm py-2 px-6">分析匹配度</button>
+        <div id="manualResult" class="mt-4 hidden"></div>
+      </div>
+    </div>
+
+    <!-- Empty State -->
+    <div id="emptyState" class="text-center py-16">
+      <svg class="w-20 h-20 mx-auto text-slate-200 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+      <p class="text-slate-400 text-sm">输入关键词搜索岗位，或先导入你的能力档案</p>
+    </div>
+  </main>
+
+  <!-- Job Detail Modal -->
+  <div id="jobModal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="closeModal()"></div>
+    <div class="absolute inset-4 md:inset-10 bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+      <div class="flex items-center justify-between p-5 border-b border-gray-100">
+        <h3 class="font-bold text-lg" id="modalTitle">岗位详情</h3>
+        <button onclick="closeModal()" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto p-6" id="modalContent"></div>
+    </div>
+  </div>
+
+  <footer class="text-center py-6 text-xs text-slate-400 border-t border-gray-100 mt-8">
+    <p>岗位智能匹配 - 职业发展预测师</p>
+    <p class="mt-1">数据来源：公开招聘网站 - 匹配结果仅供参考</p>
+  </footer>
+
+  <script>
+  /* === STATE === */
+  let userProfile = null;
+  let searchResults = [];
+  let currentSort = 'match';
+
+  /* === SKILL KEYWORDS FOR MATCHING === */
+  const skillKW = {
+    programming:['Python','Java','JavaScript','TypeScript','C++','Go','Rust','React','Vue','Node.js','SQL','数据库','前端','后端','全栈','算法','数据结构','机器学习','深度学习','AI','人工智能','HTML','CSS','Spring','Django','Flask'],
+    tools:['Excel','PPT','Figma','Sketch','Photoshop','SPSS','R','MATLAB','Tableau','Power BI','Jira','Confluence','Git','Docker','AWS','Azure','Axure','墨刀'],
+    soft:['沟通','协调','领导','团队','管理','策划','分析','调研','报告','演讲','展示','谈判','写作','翻译','逻辑思维','问题解决'],
+    domain:['产品','运营','市场','设计','研发','测试','财务','人力','法务','销售','客服','供应链','数据','用户','增长','品牌','内容','社群','项目管理'],
+    actions:['负责','主导','参与','完成','优化','提升','降低','实现','搭建','设计','开发','维护','推动','策划','执行'],
+    metrics:['%','万','千','百','增长','提升','降低','节省','创收','用户数','转化率','满意度','效率','成本']
+  };
+
+  /* === IMPORT PROFILE FROM FIRST APP === */
+  function importProfile() {
+    try {
+      var saved = localStorage.getItem('careerPredictor');
+      if (!saved) { alert('未找到能力档案。请先完成「职业发展预测师」的测评。'); return; }
+      var data = JSON.parse(saved);
+      userProfile = {};
+      if (data.experienceAnalysis) {
+        userProfile.keywords = data.experienceAnalysis.keywords || [];
+        userProfile.skills = data.experienceAnalysis.skills || [];
+        userProfile.tools = data.experienceAnalysis.tools || [];
+        userProfile.domains = data.experienceAnalysis.domains || [];
+        userProfile.abilityScores = data.experienceAnalysis.abilityScores || {};
+      }
+      if (data.softSkills) {
+        userProfile.softSkills = data.softSkills;
+      }
+      if (data.mbtiResult) {
+        userProfile.mbti = data.mbtiResult.type;
+      }
+      document.getElementById('profileBadge').classList.remove('hidden');
+      document.getElementById('profileBadge').classList.add('flex');
+      var tags = [];
+      if (userProfile.mbti) tags.push('<span class="tag tag-primary">MBTI: ' + esc(userProfile.mbti) + '</span>');
+      (userProfile.skills || []).forEach(function(s) { tags.push('<span class="tag tag-accent">' + esc(s) + '</span>'); });
+      (userProfile.domains || []).forEach(function(d) { tags.push('<span class="tag tag-success">' + esc(d) + '</span>'); });
+      (userProfile.tools || []).forEach(function(t) { tags.push('<span class="tag tag-primary">' + esc(t) + '</span>'); });
+      document.getElementById('importedTags').innerHTML = tags.join('');
+      document.getElementById('importedInfo').classList.remove('hidden');
+      if (userProfile.domains && userProfile.domains.length > 0) {
+        document.getElementById('searchQuery').value = userProfile.domains[0];
+      } else if (userProfile.skills && userProfile.skills.length > 0) {
+        document.getElementById('searchQuery').value = userProfile.skills[0];
+      }
+    } catch(e) {
+      console.error('Import failed:', e);
+      alert('导入失败，请重试。');
+    }
+  }
+
+  /* === SEARCH JOBS === */
+  function quickSearch(keyword) {
+    document.getElementById('searchQuery').value = keyword;
+    searchJobs();
+  }
+
+  async function searchJobs() {
+    var query = document.getElementById('searchQuery').value.trim();
+    if (!query) { alert('请输入搜索关键词'); return; }
+    var location = document.getElementById('searchLocation').value.trim();
+    var count = parseInt(document.getElementById('searchCount').value) || 10;
+
+    document.getElementById('loadingState').classList.remove('hidden');
+    document.getElementById('resultsSection').classList.add('hidden');
+    document.getElementById('emptyState').classList.add('hidden');
+    document.getElementById('searchBtn').disabled = true;
+    document.getElementById('searchBtnText').textContent = '搜索中...';
+
+    try {
+      var resp = await fetch('/api/search-jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: query, location: location, count: count })
+      });
+      var data = await resp.json();
+      if (!data.success) throw new Error(data.error || 'Search failed');
+
+      searchResults = data.jobs || [];
+      if (userProfile) {
+        searchResults.forEach(function(job) {
+          job.matchScore = calculateMatchScore(job);
+          job.matchedSkills = getMatchedSkills(job);
+          job.gapSkills = getGapSkills(job);
+        });
+      } else {
+        searchResults.forEach(function(job) { job.matchScore = null; });
+      }
+      renderResults(searchResults, query);
+    } catch(e) {
+      console.error('Search error:', e);
+      alert('搜索失败：' + e.message);
+    } finally {
+      document.getElementById('loadingState').classList.add('hidden');
+      document.getElementById('searchBtn').disabled = false;
+      document.getElementById('searchBtnText').textContent = '搜索岗位';
+    }
+  }
+
+  /* === MATCH SCORING === */
+  function calculateMatchScore(job) {
+    if (!userProfile) return null;
+    var text = (job.title + ' ' + job.snippet).toLowerCase();
+    var allUserKeywords = [].concat(
+      userProfile.keywords || [],
+      userProfile.skills || [],
+      userProfile.tools || [],
+      userProfile.domains || []
+    ).map(function(k) { return k.toLowerCase(); });
+
+    if (allUserKeywords.length === 0) return 50;
+
+    var matched = 0;
+    var total = 0;
+    Object.keys(skillKW).forEach(function(cat) {
+      skillKW[cat].forEach(function(kw) {
+        if (text.includes(kw.toLowerCase())) {
+          total++;
+          if (allUserKeywords.includes(kw.toLowerCase())) matched++;
+        }
+      });
+    });
+
+    allUserKeywords.forEach(function(uk) {
+      if (text.includes(uk) && uk.length > 1) {
+        matched += 0.5;
+        total += 1;
+      }
+    });
+
+    if (total === 0) return Math.floor(Math.random() * 30 + 30);
+    return Math.min(98, Math.max(15, Math.round(matched / total * 100)));
+  }
+
+  function getMatchedSkills(job) {
+    if (!userProfile) return [];
+    var text = (job.title + ' ' + job.snippet).toLowerCase();
+    var userKWs = [].concat(
+      userProfile.keywords || [],
+      userProfile.skills || [],
+      userProfile.tools || [],
+      userProfile.domains || []
+    ).map(function(k) { return k.toLowerCase(); });
+    var matched = [];
+    Object.keys(skillKW).forEach(function(cat) {
+      skillKW[cat].forEach(function(kw) {
+        if (text.includes(kw.toLowerCase()) && userKWs.includes(kw.toLowerCase())) {
+          matched.push(kw);
+        }
+      });
+    });
+    return matched.filter(function(v, i, a) { return a.indexOf(v) === i; });
+  }
+
+  function getGapSkills(job) {
+    if (!userProfile) return [];
+    var text = (job.title + ' ' + job.snippet).toLowerCase();
+    var userKWs = [].concat(
+      userProfile.keywords || [],
+      userProfile.skills || [],
+      userProfile.tools || [],
+      userProfile.domains || []
+    ).map(function(k) { return k.toLowerCase(); });
+    var gaps = [];
+    Object.keys(skillKW).forEach(function(cat) {
+      skillKW[cat].forEach(function(kw) {
+        if (text.includes(kw.toLowerCase()) && !userKWs.includes(kw.toLowerCase())) {
+          gaps.push(kw);
+        }
+      });
+    });
+    return gaps.filter(function(v, i, a) { return a.indexOf(v) === i; });
+  }
+
+  /* === RENDER RESULTS === */
+  function renderResults(jobs, query) {
+    document.getElementById('resultsSection').classList.remove('hidden');
+    document.getElementById('emptyState').classList.add('hidden');
+    document.getElementById('resultsSummary').textContent = '找到 ' + jobs.length + ' 个相关岗位';
+
+    var overviewHTML = '';
+    if (userProfile && jobs.length > 0) {
+      var scores = jobs.map(function(j){ return j.matchScore || 0; });
+      var avgScore = Math.round(scores.reduce(function(a,b){return a+b;},0) / scores.length);
+      var highMatch = jobs.filter(function(j){ return (j.matchScore||0) >= 70; }).length;
+      var sources = {};
+      jobs.forEach(function(j){ sources[j.source] = (sources[j.source]||0)+1; });
+      var topSource = Object.keys(sources).sort(function(a,b){return sources[b]-sources[a];})[0] || '--';
+      overviewHTML = '<div class="card-flat p-4 text-center"><p class="text-2xl font-bold gradient-text">' + avgScore + '%</p><p class="text-xs text-slate-400">平均匹配度</p></div>' +
+        '<div class="card-flat p-4 text-center"><p class="text-2xl font-bold text-emerald-600">' + highMatch + '</p><p class="text-xs text-slate-400">高匹配岗位（70%以上）</p></div>' +
+        '<div class="card-flat p-4 text-center"><p class="text-2xl font-bold text-primary-600">' + jobs.length + '</p><p class="text-xs text-slate-400">搜索来源：' + esc(topSource) + '</p></div>';
+    } else {
+      overviewHTML = '<div class="card-flat p-4 text-center col-span-full"><p class="text-sm text-slate-500">导入能力档案后可查看匹配度分析</p></div>';
+    }
+    document.getElementById('overviewCards').innerHTML = overviewHTML;
+
+    var listHTML = '';
+    jobs.forEach(function(job, idx) {
+      var scoreColor = '#64748B';
+      var scoreLabel = '';
+      if (job.matchScore !== null) {
+        if (job.matchScore >= 70) { scoreColor = '#10B981'; scoreLabel = '高匹配'; }
+        else if (job.matchScore >= 40) { scoreColor = '#F59E0B'; scoreLabel = '中等匹配'; }
+        else { scoreColor = '#EF4444'; scoreLabel = '低匹配'; }
+      }
+      listHTML += '<div class="job-card" onclick="showJobDetail(' + idx + ')" id="job-' + idx + '">';
+      listHTML += '<div class="flex items-start justify-between gap-4">';
+      listHTML += '<div class="flex-1 min-w-0">';
+      listHTML += '<h4 class="font-semibold text-base mb-1 truncate">' + esc(job.title) + '</h4>';
+      if (job.company) listHTML += '<p class="text-sm text-slate-500 mb-2">' + esc(job.company) + '</p>';
+      listHTML += '<p class="text-xs text-slate-400 mb-2" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + esc(job.snippet) + '</p>';
+      listHTML += '<div class="flex flex-wrap gap-1 items-center">';
+      if (job.matchScore !== null) {
+        listHTML += '<span class="tag" style="background:' + scoreColor + '15;color:' + scoreColor + '">' + job.matchScore + '% ' + scoreLabel + '</span>';
+      }
+      listHTML += '<span class="source-badge">' + esc(job.source) + '</span>';
+      if (job.matchedSkills && job.matchedSkills.length > 0) {
+        listHTML += job.matchedSkills.slice(0,3).map(function(s){ return '<span class="skill-badge skill-matched">' + esc(s) + '</span>'; }).join('');
+      }
+      listHTML += '</div></div>';
+      if (job.matchScore !== null) {
+        listHTML += '<div class="flex-shrink-0 text-center"><div class="w-14 h-14 rounded-full flex items-center justify-center" style="border:3px solid ' + scoreColor + '"><span class="text-lg font-bold" style="color:' + scoreColor + '">' + job.matchScore + '</span></div></div>';
+      }
+      listHTML += '</div></div>';
+    });
+    document.getElementById('jobList').innerHTML = listHTML;
+  }
+
+  /* === SORT === */
+  function sortResults(by) {
+    currentSort = by;
+    document.getElementById('sortMatch').className = by==='match' ? 'tab-btn active text-xs py-1.5 px-3' : 'tab-btn text-xs py-1.5 px-3';
+    document.getElementById('sortLatest').className = by==='latest' ? 'tab-btn active text-xs py-1.5 px-3' : 'tab-btn text-xs py-1.5 px-3';
+    var sorted = searchResults.slice();
+    if (by === 'match') {
+      sorted.sort(function(a,b){ return (b.matchScore||0) - (a.matchScore||0); });
+    }
+    renderResults(sorted, document.getElementById('searchQuery').value);
+  }
+
+  /* === JOB DETAIL MODAL === */
+  function showJobDetail(idx) {
+    var job = searchResults[idx];
+    if (!job) return;
+    document.getElementById('modalTitle').textContent = job.title;
+    var html = '<div class="space-y-4">';
+    html += '<div class="flex flex-wrap gap-2 items-center">';
+    html += '<span class="source-badge">' + esc(job.source) + '</span>';
+    if (job.publishTime) html += '<span class="text-xs text-slate-400">' + esc(job.publishTime) + '</span>';
+    if (job.url) html += '<a href="' + esc(job.url) + '" target="_blank" class="text-xs text-primary-600 hover:underline">查看原文 &#8599;</a>';
+    html += '</div>';
+    if (job.matchScore !== null) {
+      var scoreColor = job.matchScore >= 70 ? '#10B981' : job.matchScore >= 40 ? '#F59E0B' : '#EF4444';
+      html += '<div class="card-flat p-4"><div class="flex items-center gap-4">';
+      html += '<div class="text-center"><p class="text-3xl font-bold" style="color:' + scoreColor + '">' + job.matchScore + '%</p><p class="text-xs text-slate-400">匹配度</p></div>';
+      html += '<div class="flex-1"><div class="match-bar"><div class="fill" style="width:' + job.matchScore + '%;background:' + scoreColor + '"></div></div></div>';
+      html += '</div></div>';
+    }
+    if (job.matchedSkills && job.matchedSkills.length > 0) {
+      html += '<div><p class="text-sm font-medium text-emerald-600 mb-2">&#10004; 你已具备的能力</p><div class="flex flex-wrap gap-1">';
+      job.matchedSkills.forEach(function(s) { html += '<span class="skill-badge skill-matched">' + esc(s) + '</span>'; });
+      html += '</div></div>';
+    }
+    if (job.gapSkills && job.gapSkills.length > 0) {
+      html += '<div><p class="text-sm font-medium text-amber-600 mb-2">&#9888; 需要补强的能力</p><div class="flex flex-wrap gap-1">';
+      job.gapSkills.forEach(function(s) { html += '<span class="skill-badge skill-gap">' + esc(s) + '</span>'; });
+      html += '</div></div>';
+    }
+    html += '<div><p class="text-sm font-medium text-slate-700 mb-2">岗位信息</p>';
+    html += '<div class="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap bg-warm-50 rounded-lg p-4">' + esc(job.snippet) + '</div></div>';
+    html += '</div>';
+    document.getElementById('modalContent').innerHTML = html;
+    document.getElementById('jobModal').classList.remove('hidden');
+  }
+
+  function closeModal() {
+    document.getElementById('jobModal').classList.add('hidden');
+  }
+
+  /* === MANUAL JD ANALYSIS === */
+  function analyzeManualJD() {
+    var jd = document.getElementById('manualJD').value.trim();
+    if (!jd) { alert('请先粘贴 JD 内容'); return; }
+    var resultHTML = '<div class="card-flat p-4">';
+    if (userProfile) {
+      var text = jd.toLowerCase();
+      var userKWs = [].concat(
+        userProfile.keywords || [],
+        userProfile.skills || [],
+        userProfile.tools || [],
+        userProfile.domains || []
+      ).map(function(k) { return k.toLowerCase(); });
+      var matched = [];
+      var gaps = [];
+      Object.keys(skillKW).forEach(function(cat) {
+        skillKW[cat].forEach(function(kw) {
+          if (text.includes(kw.toLowerCase())) {
+            if (userKWs.includes(kw.toLowerCase())) matched.push(kw);
+            else gaps.push(kw);
+          }
+        });
+      });
+      var total = matched.length + gaps.length;
+      var score = total > 0 ? Math.round(matched.length / total * 100) : 50;
+      var scoreColor = score >= 70 ? '#10B981' : score >= 40 ? '#F59E0B' : '#EF4444';
+      resultHTML += '<div class="flex items-center gap-4 mb-4"><div class="text-center"><p class="text-3xl font-bold" style="color:' + scoreColor + '">' + score + '%</p><p class="text-xs text-slate-400">匹配度</p></div>';
+      resultHTML += '<div class="flex-1"><div class="match-bar"><div class="fill" style="width:' + score + '%;background:' + scoreColor + '"></div></div></div></div>';
+      if (matched.length > 0) {
+        resultHTML += '<p class="text-sm font-medium text-emerald-600 mb-2">&#10004; 已具备（' + matched.length + '）</p><div class="flex flex-wrap gap-1 mb-3">';
+        matched.forEach(function(s) { resultHTML += '<span class="skill-badge skill-matched">' + esc(s) + '</span>'; });
+        resultHTML += '</div>';
+      }
+      if (gaps.length > 0) {
+        resultHTML += '<p class="text-sm font-medium text-amber-600 mb-2">&#9888; 差距项（' + gaps.length + '）</p><div class="flex flex-wrap gap-1 mb-3">';
+        gaps.forEach(function(s) { resultHTML += '<span class="skill-badge skill-gap">' + esc(s) + '</span>'; });
+        resultHTML += '</div>';
+      }
+      resultHTML += '<p class="text-xs text-slate-400 mt-2">建议：' + (gaps.length > 0 ? '优先补强 ' + gaps.slice(0,3).join('、') + ' 等能力' : '你已具备该岗位的核心能力，可以大胆投递') + '</p>';
+    } else {
+      resultHTML += '<p class="text-sm text-slate-500">请先导入能力档案，再进行匹配分析。</p>';
+    }
+    resultHTML += '</div>';
+    document.getElementById('manualResult').innerHTML = resultHTML;
+    document.getElementById('manualResult').classList.remove('hidden');
+  }
+
+  function esc(s) {
+    if (!s) return '';
+    var d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  /* === INIT === */
+  document.addEventListener('DOMContentLoaded', function() {
+    try {
+      var saved = localStorage.getItem('careerPredictor');
+      if (saved) {
+        var data = JSON.parse(saved);
+        if (data.experienceAnalysis || data.softSkills) {
+          importProfile();
+        }
+      }
+    } catch(e) {}
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeModal();
+  });
+  </script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: university-career-explorer
+    runtime: node
+    plan: free
+    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    startCommand: pnpm start
+    healthCheckPath: /
+    autoDeployTrigger: commit
