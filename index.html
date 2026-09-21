@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>大学生就业方向探索器 - 看清方向，找到路径</title>
-  <meta name="description" content="面向本科生与研究生的就业方向探索工具，通过方向排序、能力测评、经历解析和岗位匹配，帮你判断本专业就业还是跨专业就业">
+  <title>职途星轨 - 每条职业路径，都有自己的星轨</title>
+  <meta name="description" content="从专业、能力与经历出发，用五步看见更适合你的方向，把模糊的可能，连成一条可以出发的路。">
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script async src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" integrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
@@ -147,15 +147,15 @@
           <div class="w-8 h-8 gradient-bg rounded-lg flex items-center justify-center">
             <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
           </div>
-          <span class="font-bold text-sm gradient-text">大学生就业方向探索器</span>
+          <span class="font-bold text-sm gradient-text">职途星轨</span>
         </div>
         <div class="progress-bar flex-1 mx-4 max-w-xs">
           <div class="fill" id="globalProgress" style="width: 0%"></div>
         </div>
         <span class="text-xs text-slate-400" id="progressText">0/5 步</span>
-        <button onclick="openCareerAssistant()" class="ml-3 inline-flex items-center gap-1.5 rounded-lg bg-primary-50 px-3 py-2 text-xs font-semibold text-primary-600 hover:bg-primary-100" aria-label="打开就业答疑">
+        <button onclick="openCareerAssistant()" class="ml-3 inline-flex items-center gap-1.5 rounded-lg bg-primary-50 px-3 py-2 text-xs font-semibold text-primary-600 hover:bg-primary-100" aria-label="打开星轨答疑">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-5 4v-4z"/></svg>
-          <span class="hidden md:inline">就业答疑</span>
+          <span class="hidden md:inline">星轨答疑</span>
         </button>
       </div>
       <div class="flex items-center gap-1 overflow-x-auto pb-1" id="stepItems">
@@ -194,20 +194,20 @@
       <div class="text-center py-12 md:py-20">
         <div class="inline-flex items-center gap-2 bg-primary-50 text-primary-600 rounded-full px-4 py-1.5 text-sm font-medium mb-6">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-          专为在校本科生与研究生设计
+          写给正在寻找方向的你
         </div>
         <h1 class="text-4xl md:text-5xl font-bold tracking-tight mb-4">
-          <span class="gradient-text">大学生就业方向探索器</span>
+          <span class="gradient-text">职途星轨</span>
         </h1>
         <p class="text-lg md:text-xl text-slate-500 max-w-2xl mx-auto mb-8 leading-relaxed">
-          不知道该选什么就业方向？纠结要不要本专业就业？<br>
-          从专业与求职意向出发，先看见具体行业和岗位，<br class="hidden md:block">
-          再用五步把模糊想法变成可行动的求职计划。
+          每条职业路径，都有自己的星轨。<br>
+          从专业、能力与经历出发，用五步看见更适合你的方向，<br class="hidden md:block">
+          把模糊的可能，连成一条可以出发的路。
         </p>
         <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
           <button id="continueTestButton" onclick="continueCurrentTest()" class="btn-primary text-lg px-10 py-4 shadow-lg">开始探索 &#8594;</button>
           <button id="newTestHomeButton" onclick="startNewTest()" class="btn-secondary text-lg px-8 py-3.5 hidden">开始新测试</button>
-          <button onclick="openCareerAssistant()" class="btn-secondary text-lg px-8 py-3.5">先问一个就业问题</button>
+          <button onclick="openCareerAssistant()" class="btn-secondary text-lg px-8 py-3.5">先聊聊我的困惑</button>
         </div>
       </div>
       <section id="historySection" class="card p-6 mb-8 border border-slate-100" aria-labelledby="historyTitle">
@@ -272,7 +272,7 @@
               <p class="text-sm text-slate-500 mt-1">随时了解不同岗位做什么、就业去向如何，以及本专业和跨专业路径该怎么比较。</p>
             </div>
           </div>
-          <button onclick="openCareerAssistant()" class="btn-secondary text-sm py-2 px-4 flex-shrink-0">打开就业答疑</button>
+          <button onclick="openCareerAssistant()" class="btn-secondary text-sm py-2 px-4 flex-shrink-0">打开星轨答疑</button>
         </div>
       </div>
       <div class="card p-5 max-w-2xl mx-auto mb-8 bg-amber-50/50 border border-amber-100">
@@ -351,7 +351,7 @@
             <h3 class="text-xl font-bold">选择并排序你想进一步了解的方向</h3>
             <p class="text-sm text-slate-500 mt-1">请选择 3–5 个“行业 + 岗位方向”。第一名代表你最想优先验证的方向。</p>
           </div>
-          <button onclick="openCareerAssistant()" class="btn-secondary text-sm py-2 px-4">有疑问？去就业答疑</button>
+          <button onclick="openCareerAssistant()" class="btn-secondary text-sm py-2 px-4">有疑问？去星轨答疑</button>
         </div>
         <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
           <div id="directionCards" class="xl:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4"></div>
@@ -686,10 +686,10 @@
           <span class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-5 4v-4z"/></svg>
           </span>
-          <div><h2 id="assistantTitle" class="font-bold">大学生就业答疑</h2><p class="text-xs text-white/70">随时了解行业、岗位与求职路径</p></div>
+          <div><h2 id="assistantTitle" class="font-bold">星轨答疑</h2><p class="text-xs text-white/70">随时了解行业、岗位与求职路径</p></div>
         </div>
       </div>
-      <button onclick="closeCareerAssistant()" class="w-9 h-9 rounded-lg hover:bg-white/15 text-2xl leading-none" aria-label="关闭就业答疑">&times;</button>
+      <button onclick="closeCareerAssistant()" class="w-9 h-9 rounded-lg hover:bg-white/15 text-2xl leading-none" aria-label="关闭星轨答疑">&times;</button>
     </div>
 
     <div class="px-4 pt-4 flex-shrink-0">
@@ -733,13 +733,13 @@
     </div>
   </aside>
 
-  <button id="floatingAssistant" onclick="openCareerAssistant()" class="floating-assistant btn-primary no-print inline-flex items-center gap-2 px-5 py-3" aria-label="打开大学生就业答疑">
+  <button id="floatingAssistant" onclick="openCareerAssistant()" class="floating-assistant btn-primary no-print inline-flex items-center gap-2 px-5 py-3" aria-label="打开星轨答疑">
     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-5 4v-4z"/></svg>
-    <span>就业答疑</span>
+    <span>星轨答疑</span>
   </button>
 
   <footer class="no-print text-center py-6 text-xs text-slate-400 border-t border-gray-100 mt-8">
-    <p>大学生就业方向探索器 - 从迷茫到可验证的选择</p>
+    <p>职途星轨 - 从迷茫到可验证的选择</p>
     <p class="mt-1">能力画像保存在本地；岗位搜索仅发送关键词与城市 - 所有建议仅供探索参考</p>
   </footer>
 
