@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>岗位智能匹配 - 职业发展预测师</title>
+  <title>岗位智能匹配 - 职途星轨</title>
   <meta name="description" content="从全网搜索岗位JD，智能匹配你的软硬实力，找到最适合你的工作机会">
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
@@ -65,7 +65,7 @@
             <div class="w-8 h-8 gradient-bg rounded-lg flex items-center justify-center">
               <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
             </div>
-            <span class="font-bold text-sm gradient-text">职业发展预测师</span>
+            <span class="font-bold text-sm gradient-text">职途星轨</span>
           </a>
           <span class="text-slate-300">|</span>
           <span class="text-sm font-medium text-slate-600">岗位智能匹配</span>
@@ -87,7 +87,7 @@
       <div class="flex items-center justify-between">
         <div>
           <h3 class="font-semibold text-sm text-primary-700 mb-1">导入你的能力档案</h3>
-          <p class="text-xs text-slate-500">如果你已完成「职业发展预测师」的测评，可以一键导入你的软硬实力数据，让匹配更精准。</p>
+          <p class="text-xs text-slate-500">如果你已完成「职途星轨」的测评，可以一键导入你的软硬实力数据，让匹配更精准。</p>
         </div>
         <button onclick="importProfile()" class="btn-primary text-sm py-2 px-4 flex-shrink-0">一键导入</button>
       </div>
@@ -193,7 +193,7 @@
   </div>
 
   <footer class="text-center py-6 text-xs text-slate-400 border-t border-gray-100 mt-8">
-    <p>岗位智能匹配 - 职业发展预测师</p>
+    <p>岗位智能匹配 - 职途星轨</p>
     <p class="mt-1">数据来源：公开招聘网站 - 匹配结果仅供参考</p>
   </footer>
 
@@ -217,7 +217,7 @@
   function importProfile() {
     try {
       var saved = localStorage.getItem('careerPredictor');
-      if (!saved) { alert('未找到能力档案。请先完成「职业发展预测师」的测评。'); return; }
+      if (!saved) { alert('未找到能力档案。请先完成「职途星轨」的测评。'); return; }
       var data = JSON.parse(saved);
       userProfile = {};
       if (data.experienceAnalysis) {
