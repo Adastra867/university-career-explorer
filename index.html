@@ -157,6 +157,7 @@
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-5 4v-4z"/></svg>
           <span class="hidden md:inline">星轨答疑</span>
         </button>
+        <a href="career-prep.html" class="ml-2 text-xs font-semibold text-emerald-700 whitespace-nowrap">求职冲刺</a>
       </div>
       <div class="flex items-center gap-1 overflow-x-auto pb-1" id="stepItems">
         <div class="step-item active" data-step="0" onclick="goToStep(0)">
@@ -209,6 +210,10 @@
           <button id="newTestHomeButton" onclick="startNewTest()" class="btn-secondary text-lg px-8 py-3.5 hidden">开始新测试</button>
           <button onclick="openCareerAssistant()" class="btn-secondary text-lg px-8 py-3.5">先聊聊我的困惑</button>
         </div>
+      </div>
+      <div class="card p-6 mb-8 border border-emerald-100 bg-emerald-50/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div><span class="tag tag-accent">大三 / 大四 · 已确定方向</span><h2 class="text-xl font-bold mt-2">准备投递？开始练简历、笔试与面试</h2><p class="text-sm text-slate-500 mt-1">沿用目标岗位、经历和 JD，针对行业和岗位练习。</p></div>
+        <a href="career-prep.html" class="btn-primary text-center flex-shrink-0">进入求职冲刺 &#8594;</a>
       </div>
       <section id="historySection" class="card p-6 mb-8 border border-slate-100" aria-labelledby="historyTitle">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
@@ -293,6 +298,7 @@
           <div class="inline-flex items-center rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600 mb-3">第 1 步 · 方向定位</div>
           <h2 class="text-2xl font-bold mb-2">先说说你现在站在哪里</h2>
           <p class="text-slate-500 text-sm">只收集生成方向建议所需的信息。完成后，你会看到可比较、可排序的行业与岗位选项。</p>
+          <p class="text-sm mt-2"><a href="career-prep.html" class="text-emerald-700 font-semibold">方向已确定？直接练简历、笔试与面试 &#8594;</a></p>
         </div>
         <button id="saveStep1Button" onclick="saveProgressNow(1,this)" class="btn-secondary text-sm py-2 px-4 flex-shrink-0 no-print">保存进度</button>
       </div>
@@ -599,6 +605,7 @@
           <div class="flex flex-wrap gap-2"><button onclick="exitHistoryView()" class="btn-secondary text-sm py-2 px-4">返回历史列表</button><button onclick="editViewedHistory(1)" class="btn-primary text-sm py-2 px-4">继续修改</button></div>
         </div>
       </div>
+      <div class="card p-5 mb-6 border border-emerald-100 bg-emerald-50/40 no-print flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><p class="font-semibold">继续准备目标岗位的投递</p><p class="text-sm text-slate-500 mt-1">练习简历、行业岗位笔试与模拟面试。</p></div><a href="career-prep.html" class="btn-primary text-sm py-2 px-4 text-center flex-shrink-0">进入求职冲刺 &#8594;</a></div>
       <div id="reportContent">
         <div class="card p-6 mb-6 gradient-bg text-white report-section report-keep-together">
           <h3 class="text-xl font-bold mb-2">你的专属就业方向报告</h3>
@@ -1364,6 +1371,9 @@
   }
 
   function saveToLocalStorage() {
+    if (!historyViewMode && appData.directionRanking.length) {
+      appData.directionSnapshots = uniqueDirections((appData.directionSnapshots || []).concat(appData.directionRanking.map(findDirectionById).filter(Boolean).map(normalizeDirectionSnapshot))).slice(0, 8);
+    }
     var dataToSave = appData;
     if (historyViewMode) {
       if (!historyViewReturnData) return true;
