@@ -124,5 +124,25 @@
   function fill(){['stage','role','industry','jd','resume'].forEach(id=>$(id).value=state[id]);$('confirmed').checked=state.confirmed;renderTranscript();renderWritten();}
   ['stage','role','industry','jd','resume'].forEach(id=>$(id).addEventListener('input',()=>{state[id]=$(id).value;save();}));$('confirmed').addEventListener('change',()=>{state.confirmed=$('confirmed').checked;save();});
   $('importBtn').addEventListener('click',importCore);$('experienceBtn').addEventListener('click',useExperience);$('analyzeBtn').addEventListener('click',analyzeResume);$('startBtn').addEventListener('click',startInterview);$('submitBtn').addEventListener('click',submitAnswer);$('generateWrittenBtn').addEventListener('click',generateWritten);$('reviewWrittenBtn').addEventListener('click',reviewWritten);$('exportBtn').addEventListener('click',exportRecord);$('downloadKbBtn').addEventListener('click',()=>download('职途星轨-求职知识包.json',JSON.stringify({title:'职途星轨求职知识包',description:'本站根据公开资料整理的练习要点，请通过链接阅读原文。',items:KNOWLEDGE},null,2),'application/json;charset=utf-8'));
+  // The shared profile supplies public background; practice transcripts remain local.
+  function applySharedProfile(profile) {
+    if (!profile?.fields) return;
+    const value = path => { const field=profile.fields[path];if(field?.value===null&&field.source_type==='user_form')return '';return field?.value_state==='known'&&field.source_type!=='ai_inference'?field.value:null; };
+    const experience=value('experience.text'),stage=value('education.stage'),target=value('preferences.long_term_goal');
+    if (experience!==null&&!window.CareerProfile?.isEditing('experience.text')) state.resume=experience;
+    if (stage!==null) state.stage=/大三/.test(stage)?'junior':/大四/.test(stage)?'senior':'other';
+    if (target!==null) {
+      state.role=target;
+      const field=profile.fields['preferences.long_term_goal'];
+      state.confirmed=['confirmed','corrected'].includes(field.confirmation_state);
+    }
+    const intake=window.CareerProfile?.currentIntake;
+    if (intake?.conditions?.jd) state.jd=intake.conditions.jd;
+    fill();
+    $('targetStatus').textContent='已读取全站统一资料。资料变化后，请重新诊断；本地练习记录仍保留。';
+    const diagnosis=$('diagnosis');if(diagnosis.children.length&&diagnosis.textContent.indexOf('填写目标岗位和简历后开始诊断。')<0){diagnosis.replaceChildren();result(diagnosis,'使用此前资料生成','统一资料已更新，可重新点击“诊断简历”。');}
+  }
+  window.addEventListener('career-profile-updated',event=>applySharedProfile(event.detail));
   fill();renderSources();
+  if(window.CareerProfile?.profile)applySharedProfile(window.CareerProfile.profile);
 })();

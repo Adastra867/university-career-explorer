@@ -2,12 +2,45 @@ import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { createHash } from 'crypto';
+import { existsSync } from 'fs';
 import { SearchClient, Config } from 'coze-coding-dev-sdk';
+import { createJourneyRouter } from './journey/server.js';
+import { createCareerRouter } from './p0/api.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+if (process.env.JOURNEY_LOAD_ENV !== 'false' && existsSync(join(__dirname, '.env')) && typeof process.loadEnvFile === 'function') process.loadEnvFile(join(__dirname, '.env'));
 
 const app = express();
+if (process.env.CAREER_TRUST_PROXY === 'true') app.set('trust proxy', 1);
+if ((process.env.NODE_ENV === 'production' || process.env.RENDER === 'true') && !process.env.CAREER_DB_PATH) {
+  // A free Render service has no persistent filesystem. Keep the existing site
+  // online, but never accept student records into an ephemeral SQLite file.
+  const unavailableCareerPaths = [
+    '/career/status', '/guest-session', '/campaigns/:slug/public',
+    '/me/profile', '/me/profile/import', '/me/submissions',
+    '/me/submissions/:id/withdraw', '/me/data',
+    '/intakes', '/intakes/:id', '/intakes/:id/draft',
+    '/intakes/:id/turns', '/intakes/:id/submission-preview', '/submissions',
+    '/admin/login', '/admin/session', '/admin/logout', '/admin/campaigns',
+    '/admin/campaigns/:id', '/admin/campaigns/:id/qr.svg',
+    '/admin/submissions', '/admin/submissions/:id',
+  ];
+  app.all(unavailableCareerPaths.map(path => `/api${path}`), (_req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.set('X-Content-Type-Options', 'nosniff');
+    res.status(503).json({ error: {
+      code: 'STORAGE_NOT_CONFIGURED',
+      message: '资料服务尚未配置持久存储，暂不能收集问卷或保存云端资料。你仍可使用原方向探索和职业树。',
+    } });
+  });
+} else {
+  app.use('/api', createCareerRouter());
+}
+app.get(['/start','/start/'], (_req,res) => res.sendFile(join(__dirname,'p0','public','start.html')));
+app.get(['/admin','/admin/'], (_req,res) => res.sendFile(join(__dirname,'p0','public','admin.html')));
+app.use('/p0', express.static(join(__dirname,'p0','public'), {dotfiles:'deny',index:false}));
+app.use('/p0', (_req,res) => res.status(404).send('Not found'));
 const PORT = process.env.PORT || process.env.DEPLOY_RUN_PORT || 5000;
 const JOB_RECOMMENDATION_CACHE_TTL = 10 * 60 * 1000;
 const JOB_RECOMMENDATION_RATE_LIMIT = 8 * 1000;
@@ -15,7 +48,33 @@ const JOB_SEARCH_TIMEOUT_MS = 9 * 1000;
 const jobRecommendationCache = new Map();
 const jobRecommendationRequestTimes = new Map();
 
+// Independent P0 workspace. Disabling this flag leaves all legacy routes intact.
+if (process.env.JOURNEY_ENABLED !== 'false') {
+  app.use('/api/journey', createJourneyRouter());
+  app.get(['/trees', '/trees/', '/trees/:treeId', '/journey', '/journey/'], (_req, res) => res.sendFile(join(__dirname, 'journey', 'index.html')));
+  app.get('/journey/vendor/:asset', (req, res) => ['pdf.mjs', 'pdf.worker.mjs'].includes(req.params.asset)
+    ? res.sendFile(join(__dirname, 'node_modules', 'pdfjs-dist', 'build', req.params.asset))
+    : res.status(404).send('Not found'));
+  const journeyAssets = new Set(['index.html', 'style.css', 'workspace.css', 'extensions.css', 'forest.css', 'forest.js', 'app.js', 'graph.js', 'store.js', 'extensions.js', 'privacy.js', 'documents.js', 'legacy-adapter.js', 'planning.js', 'ai-v11.css', 'ai-store.js', 'ai-panels.js', 'ai-client.js', 'ai-context.js', 'ai-integration.js']);
+  journeyAssets.add('forest-ai.js');
+  journeyAssets.add('ai-legacy-migration.js');
+  app.get('/journey/:asset', (req, res) => journeyAssets.has(req.params.asset)
+    ? res.sendFile(join(__dirname, 'journey', req.params.asset))
+    : res.status(404).send('Not found'));
+  app.use('/journey', (_req, res) => res.status(404).send('Not found'));
+} else {
+  app.use(['/journey', '/trees', '/api/journey'], (_req, res) => res.status(404).send('始于足下暂未开放'));
+}
 app.use(express.json());
+// The legacy static directory must not bypass the Journey gate through encoded
+// separators, dot segments, or expose Journey server/test implementation files.
+app.use((req, res, next) => {
+  let segments;
+  try { segments = decodeURIComponent(req.path).replace(/\\/g, '/').toLowerCase().split('/').map(segment => segment.replace(/[. ]+$/, '')); }
+  catch { return res.status(400).send('Invalid path'); }
+  if (segments.some(segment => segment.includes(':')) || ['journey','tests','node_modules','p0','data','docs','.git','artifacts'].some(segment=>segments.includes(segment)) || segments.at(-1) === 'server.js' || /\.(sqlite|sqlite-wal|sqlite-shm|db|sql|env)$/i.test(segments.at(-1)||'')) return res.status(404).send('Not found');
+  next();
+});
 app.use(express.static(__dirname));
 
 const JOB_PLATFORM_SITES = 'zhipin.com,zhaopin.com,51job.com,liepin.com,lagou.com,intern.supply';
@@ -130,7 +189,7 @@ app.post('/api/search-jobs', async (req, res) => {
 
     res.json({ success: true, jobs, total: jobs.length });
   } catch (error) {
-    console.error('Search error:', error);
+    console.error('Search unavailable:', isSearchConfigurationError(error) ? 'NOT_CONFIGURED' : 'UPSTREAM_ERROR');
     res.status(503).json({ success: false, code: isSearchConfigurationError(error) ? 'SEARCH_NOT_CONFIGURED' : 'SEARCH_UNAVAILABLE', error: '联网岗位搜索暂不可用，请稍后重试。' });
   }
 });
@@ -257,7 +316,7 @@ app.post('/api/recommend-jobs', async (req, res) => {
         })));
       } catch (error) {
         broadSearchFailed = true;
-        console.warn('Broad job search fallback failed:', error.message);
+        console.warn('Broad job search fallback unavailable.');
       }
     }
 
@@ -301,7 +360,7 @@ app.post('/api/recommend-jobs', async (req, res) => {
     jobRecommendationCache.set(cacheKey, { createdAt: Date.now(), payload });
     res.json(payload);
   } catch (error) {
-    console.error('Recommendation search error:', error);
+    console.error('Recommendation search unavailable.');
     res.status(503).json({ success: false, code: isSearchConfigurationError(error) ? 'SEARCH_NOT_CONFIGURED' : 'SEARCH_UNAVAILABLE', error: '岗位搜索服务暂不可用，请稍后重试。' });
   }
 });
@@ -329,7 +388,7 @@ app.post('/api/fetch-jd', async (req, res) => {
       res.json({ success: true, content: items[0]?.snippet || '', title: items[0]?.title || '' });
     }
   } catch (error) {
-    console.error('Fetch JD error:', error);
+    console.error('Fetch JD unavailable.');
     res.status(503).json({ success: false, code: isSearchConfigurationError(error) ? 'SEARCH_NOT_CONFIGURED' : 'SEARCH_UNAVAILABLE', error: '暂时无法读取岗位详情，请打开原始页面复制 JD。' });
   }
 });

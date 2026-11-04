@@ -3,30 +3,43 @@ node_modules/
 .pnpm-store/
 .npm/
 
-# Local environment and credentials
+# Local environment and credentials (only empty examples belong in Git)
 .env
 .env.*
 !.env.example
 !.env.*.example
 *.pem
 *.key
+*.p12
+*.pfx
 
-# Logs and runtime output
+# Student records, local databases, exports and backups
+data/
+backups/
+exports/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.db
+*.db-wal
+*.db-shm
+
+# Generated output can contain entered student data and must stay local
+artifacts/
 logs/
 *.log
 *.pid
 *.pid.lock
-
-# Generated build and test output
 dist/
 build/
 coverage/
 .cache/
-
-# Local code index (not application data)
 .codegraph/
 
-# OS and editor files
+# Local environments, OS and editor files
+.venv/
+venv/
+__pycache__/
 .DS_Store
 ._*
 Thumbs.db

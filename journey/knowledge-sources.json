@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "description": "经官方原文人工核对的有限离线资料。只保存事实转述与短摘录，不包含网站全文，不代表实时招生或招聘状态。",
+  "sources": [
+    {
+      "id": "official_cambridge_materials_mphil",
+      "title": "剑桥大学材料科学与冶金 MPhil：申请要求",
+      "publisher": "University of Cambridge — Postgraduate Admissions",
+      "url": "https://www.postgraduate.study.cam.ac.uk/courses/directory/pcmmmpmsm/requirements",
+      "publishedAt": null,
+      "checkedAt": "2026-10-13T12:22:59.000Z",
+      "region": "英国；国际申请者须另核对学历等效性",
+      "language": "en",
+      "license": "原站保留版权；仅存事实转述及短摘录，原文请访问官方链接。",
+      "locator": "Requirements → Expected Academic Standard / Language Requirement → IELTS (Academic)",
+      "excerpt": "该项目列明 IELTS Academic 总分 7.0；听力、写作、口语各 7.0，阅读 6.5。学术要求为 good II.i honours degree；非英国学历须核对等效资格。",
+      "content": "剑桥大学 University of Cambridge 材料科学与冶金研究型硕士 MPhil Materials Science and Metallurgy。官方申请页列明：IELTS Academic 雅思总分7.0；听力7.0、写作7.0、口语7.0，阅读6.5。学术标准为 good II.i honours degree；非英国学历需核对国际学历等效要求。这些条件仅适用于该项目，不能推广成所有海外硕士或新能源研发岗位的统一门槛。",
+      "applicability": "仅适用于剑桥该 MPhil 项目；不证明你已达到条件，也不代表其他学校或岗位的要求。",
+      "keywords": ["剑桥", "Cambridge", "材料", "Materials", "冶金", "MPhil", "硕士", "升学", "海外", "雅思", "IELTS", "英语", "申请", "学历"],
+      "category": "admissions",
+      "refreshAfterDays": 30,
+      "trustLevel": "official"
+    },
+    {
+      "id": "official_pmi_pmp_eligibility",
+      "title": "PMI PMP：学历、项目经验与培训资格",
+      "publisher": "Project Management Institute (PMI)",
+      "url": "https://www.pmi.org/certifications/project-management-pmp",
+      "publishedAt": null,
+      "checkedAt": "2026-10-13T12:22:59.000Z",
+      "region": "国际认证；具体报名与培训规则需按所在地区核对",
+      "language": "en",
+      "license": "原站保留版权；仅存事实转述及短摘录，原文请访问官方链接。",
+      "locator": "Check your eligibility → Education and Experience Requirements / Project Professional Training Requirements",
+      "excerpt": "本科及以上学历路线列明 3 年项目管理经验。经验按最近 10 年职业场景中的项目计算，重叠时间不重复累计；培训通常为 35 小时，有效 CAPM 可满足培训要求。",
+      "content": "PMI Project Management Professional PMP 项目管理专业人士认证申请资格。官方页面本科及以上学历路线列明3年项目管理经验；经验须来自最近10年的职业项目，重叠项目时间不能重复累计。项目专业培训要求通常为35小时；有效CAPM认证也满足该培训要求。其他学历和GAC路线条件不同，应查看完整官网。该证书申请资格不等同于某个职业必须持证，也不能证明任意岗位的录用要求。",
+      "applicability": "仅说明 PMP 报考资格的其中一条路线；不是研发、项目或其他岗位必须考证的证明。",
+      "keywords": ["PMI", "PMP", "CAPM", "项目管理", "证书", "认证", "资格", "培训", "35", "经验"],
+      "category": "certification",
+      "refreshAfterDays": 30,
+      "trustLevel": "official"
+    },
+    {
+      "id": "official_abb_discovery_eligibility",
+      "title": "ABB Discovery：毕业生项目与适用背景",
+      "publisher": "ABB Careers",
+      "url": "https://careers.abb/global/en/abb-discovery",
+      "publishedAt": null,
+      "checkedAt": "2026-10-13T12:22:59.000Z",
+      "region": "国际项目；国家和具体批次条件可能不同",
+      "language": "en",
+      "license": "原站保留版权；仅存事实转述及短摘录，原文请访问官方链接。",
+      "locator": "Who should apply? / Frequently asked questions → What functions does the program cover?",
+      "excerpt": "ABB Discovery 面向本科或硕士毕业生，学历层级取决于项目目标；涵盖工程、STEM 及部分商业职能。不同批次和岗位背景条件以具体 JD 为准。",
+      "content": "ABB Discovery graduate early talent 毕业生轮岗项目。官方页面说明申请者为本科或硕士毕业生，具体学历取决于项目目标；可涉及电气、工业、机械工程和商业等专业。项目按国家运行，目标背景会随招聘批次变化，具体岗位描述JD列出完整要求。这是项目背景介绍，不是当前开放招聘职位，也不是新能源材料研发岗位的统一学历或证书门槛。",
+      "applicability": "企业毕业生项目介绍，不代表当前有开放岗位；应另核对国家、批次与具体 JD。",
+      "keywords": ["ABB", "Discovery", "毕业生", "轮岗", "校招", "招聘", "工程", "本科", "硕士", "JD", "岗位"],
+      "category": "career_program",
+      "refreshAfterDays": 14,
+      "trustLevel": "official"
+    }
+  ]
+}

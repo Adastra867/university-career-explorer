@@ -4,16 +4,31 @@
   "type": "module",
   "description": "Career Development Predictor with Job Search",
   "main": "server.js",
+  "engines": { "node": ">=24" },
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "check": "node --check server.js"
+    "check": "node scripts/check-syntax.mjs",
+    "test": "node --test --test-concurrency=1 tests/*.test.js",
+    "test:p0": "node --test tests/p0-*.test.js",
+    "test:p0:browser": "node tests/p0-browser.mjs",
+    "admin:init": "node scripts/career-admin.mjs",
+    "data:cleanup": "node scripts/career-cleanup.mjs",
+    "test:browser": "node tests/journey-browser.mjs",
+    "test:legacy": "node tests/legacy-browser.mjs",
+    "test:next": "node tests/journey-next-browser.mjs",
+    "test:forest": "node tests/journey-forest-browser.mjs",
+    "test:ai-v11": "node tests/journey-ai-v11-browser.mjs",
+    "test:ai-panels": "node tests/ai-panels-browser.mjs",
+    "test:ai-forest": "node tests/journey-ai-forest-browser.mjs"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "coze-coding-dev-sdk": "^0.7.32",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "pdfjs-dist": "^6.4.299",
+    "qrcode": "^1.5.4"
   }
 }

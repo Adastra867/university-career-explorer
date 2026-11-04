@@ -1,38 +1,52 @@
 # 职途星轨
 
-面向大学生的职业发展规划与求职练习网站。
+Express + 原生 HTML/JavaScript 的大学生职业探索工具。P0 新增统一资料、四任务入口、访客个人草稿、活动提交和管理员记录；现有方向探索、岗位搜索、JD 分析、求职冲刺与 Journey 保留。
 
-## 页面入口
+需要 Node.js 24+ 与 pnpm。数据库使用 Node 内置 SQLite，默认持久保存到 `data/career.sqlite`；启动时自动执行可追踪迁移 `p0/migrations/001_initial.sql`。
 
-- `/`：职业方向探索、能力测评、JD 匹配与综合报告。
-- `/job-search.html`：岗位搜索与匹配。
-- `/career-prep.html`：求职冲刺，包含简历诊断、行业岗位笔试和模拟面试。
-
-## 本地运行
-
-安装 Node.js 和 pnpm 后，在项目根目录运行：
-
-```sh
+```powershell
 pnpm install --frozen-lockfile
+# 首次配置：保留已有 .env，不要覆盖真实配置。
+if (!(Test-Path -LiteralPath '.env')) { Copy-Item -LiteralPath '.env.example' -Destination '.env' }
+# 编辑 .env，填写管理员用户名、至少12位密码和公开地址。
+pnpm admin:init
 pnpm start
 ```
 
-打开 `http://127.0.0.1:5000/career-prep.html`。可通过环境变量 `PORT` 修改端口。
+如果已有 `.env`，只添加 `.env.example` 中需要的配置。管理员密码初始化后可从 `.env` 移除；初始化命令重复执行会更新该账号密码并撤销旧登录。
 
-求职冲刺无需 API 密钥。简历诊断、题目和面试反馈使用本地规则；当前未连接在线大模型。输入内容保存在当前浏览器，各人的练习记录互相独立。
+- 学生：[http://localhost:5000/start](http://localhost:5000/start)
+- 管理员：[http://localhost:5000/admin](http://localhost:5000/admin)
+- 原有功能：[http://localhost:5000/](http://localhost:5000/)
 
-## 协作修改
+管理员创建活动后复制 `/start?campaign=<slug>` 链接或二维码。学生保存进度只形成个人草稿；经预览、明确提交后，管理员才可查看提交快照。访客靠本浏览器的 HttpOnly Cookie 续用，清除 Cookie 或换设备不保证恢复。
 
-- 页面结构与样式：`career-prep.html`。
-- 简历规则、笔试题库、面试问题和反馈：`scripts/career-prep.js`。
-- 首页入口和测评资料衔接：`index.html`。
+```powershell
+pnpm check
+pnpm test
+pnpm test:p0
+pnpm test:p0:browser
+node scripts/verify-career-ai.mjs
+pnpm data:cleanup
+```
 
-组员获得仓库协作权限后，可创建分支并通过 Pull Request 提交修改。修改后先在本地检查简历诊断、笔试、面试及刷新保存，再合并到 `main`。
+在线 AI 可通过 `CAREER_AI_*` 配置；未填写时复用现有 `JOURNEY_AI_*` / `DEEPSEEK_*`。无密钥、超时、限流和无效输出会明确显示规则建议。AI 正常调用验证脚本只有收到合法在线结果才通过；受控 HTTP fixture 测试不等于真实模型验收。
 
-## 部署
+部署、保存期限、权限、已知限制与验收记录见 [P0 交付说明](docs/CAREER_P0_DELIVERY.md)。开发契约见 [P0 handoff](docs/CAREER_P0_HANDOFF.md)。
 
-`render.yaml` 使用 `pnpm install --frozen-lockfile` 安装依赖，并以 `pnpm start` 启动服务。已有服务：`https://university-career-explorer.onrender.com`。
+原 GitHub → Render 服务的部署参数、存储限制、回滚及后续一键更新见 [部署说明](docs/DEPLOYMENT.md)。修改完成后在 `main` 运行：
 
-在 Render 确认服务连接本仓库的 `main` 分支，并将 Auto-Deploy 设为 On Commit。合并后检查部署状态；如未自动更新，执行 Manual Deploy → Deploy latest commit。
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\deploy.ps1
+```
 
-发布完成后，求职冲刺入口为 `https://university-career-explorer.onrender.com/career-prep.html`。
+原公网地址为 https://university-career-explorer.onrender.com 。原免费服务没有持久磁盘，因此生产问卷收集在配置真实持久存储前暂停；原探索、匹配、求职练习和职业树继续可用。
+
+## 页面与协作
+
+- `/`：方向探索、能力画像、JD 匹配与报告。
+- `/job-search.html`：岗位搜索与匹配。
+- `/career-prep.html`：简历诊断、岗位笔试与模拟面试；使用本地规则与本浏览器保存，无需模型密钥。
+- `/trees`：职业树画布。
+
+求职练习的页面与样式在 `career-prep.html`，规则和题库在 `scripts/career-prep.js`，首页衔接在 `index.html`。组员获得仓库协作权限后，创建分支并通过 Pull Request 提交；在本地验证简历诊断、笔试、面试与刷新保存后合并到 `main`，由原 Render 服务自动发布。

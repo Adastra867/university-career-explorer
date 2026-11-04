@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>岗位智能匹配 - 职途星轨</title>
   <meta name="description" content="从全网搜索岗位JD，智能匹配你的软硬实力，找到最适合你的工作机会">
+  <script type="module" src="/scripts/job-scoring.js"></script>
+  <script defer src="/p0/profile-adapter.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.cn">
@@ -82,14 +84,16 @@
   </header>
 
   <main class="max-w-6xl mx-auto px-4 py-6">
+    <p class="text-sm mb-4"><a href="/start" class="text-primary-600 font-semibold">前往轻量入口，一句话开始探索 →</a></p>
+    <p class="text-xs text-slate-500 mb-4">材料匹配分表示与 JD 的关键词对应程度，不代表能力等级或录用概率。原文链接用于核实岗位，来源未提供的招聘日期保持未知。</p>
     <!-- Profile Import Banner -->
     <div id="importBanner" class="card-flat p-5 mb-6 border-2 border-dashed border-primary-200 bg-primary-50/30">
       <div class="flex items-center justify-between">
         <div>
-          <h3 class="font-semibold text-sm text-primary-700 mb-1">导入你的能力档案</h3>
-          <p class="text-xs text-slate-500">如果你已完成「职途星轨」的测评，可以一键导入你的软硬实力数据，让匹配更精准。</p>
+          <h3 class="font-semibold text-sm text-primary-700 mb-1">复用已有资料</h3>
+          <p class="text-xs text-slate-500">优先使用统一画像；也可在本机读取旧经历原文。保存到云端需在轻量入口预览并主动导入。</p>
         </div>
-        <button onclick="importProfile()" class="btn-primary text-sm py-2 px-4 flex-shrink-0">一键导入</button>
+        <button onclick="importProfile()" class="btn-primary text-sm py-2 px-4 flex-shrink-0">读取资料</button>
       </div>
       <div id="importedInfo" class="hidden mt-3 pt-3 border-t border-primary-100">
         <div class="flex flex-wrap gap-2" id="importedTags"></div>
@@ -160,8 +164,9 @@
 
       <!-- Job List -->
       <div id="jobList" class="space-y-4"></div>
+    </div>
 
-      <!-- Manual JD Input -->
+      <!-- Manual JD Input: usable before any network search. -->
       <div class="card-flat p-6 mt-6">
         <h3 class="font-semibold mb-3">手动粘贴 JD</h3>
         <p class="text-xs text-slate-400 mb-3">如果搜索结果不理想，你也可以直接粘贴目标岗位的 JD 进行匹配分析。</p>
@@ -169,12 +174,11 @@
         <button onclick="analyzeManualJD()" class="btn-primary mt-3 text-sm py-2 px-6">分析匹配度</button>
         <div id="manualResult" class="mt-4 hidden"></div>
       </div>
-    </div>
 
     <!-- Empty State -->
     <div id="emptyState" class="text-center py-16">
       <svg class="w-20 h-20 mx-auto text-slate-200 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-      <p class="text-slate-400 text-sm">输入关键词搜索岗位，或先导入你的能力档案</p>
+      <p class="text-slate-400 text-sm">输入关键词搜索岗位，或先复用已有资料</p>
     </div>
   </main>
 
@@ -203,55 +207,38 @@
   let searchResults = [];
   let currentSort = 'match';
 
-  /* === SKILL KEYWORDS FOR MATCHING === */
-  const skillKW = {
-    programming:['Python','Java','JavaScript','TypeScript','C++','Go','Rust','React','Vue','Node.js','SQL','数据库','前端','后端','全栈','算法','数据结构','机器学习','深度学习','AI','人工智能','HTML','CSS','Spring','Django','Flask'],
-    tools:['Excel','PPT','Figma','Sketch','Photoshop','SPSS','R','MATLAB','Tableau','Power BI','Jira','Confluence','Git','Docker','AWS','Azure','Axure','墨刀'],
-    soft:['沟通','协调','领导','团队','管理','策划','分析','调研','报告','演讲','展示','谈判','写作','翻译','逻辑思维','问题解决'],
-    domain:['产品','运营','市场','设计','研发','测试','财务','人力','法务','销售','客服','供应链','数据','用户','增长','品牌','内容','社群','项目管理'],
-    actions:['负责','主导','参与','完成','优化','提升','降低','实现','搭建','设计','开发','维护','推动','策划','执行'],
-    metrics:['%','万','千','百','增长','提升','降低','节省','创收','用户数','转化率','满意度','效率','成本']
-  };
+  function currentScoringProfile() {
+    var cloud = window.CareerProfile && window.CareerProfile.profile;
+    return cloud && Object.keys(cloud.fields || {}).length ? cloud : (userProfile || {});
+  }
 
-  /* === IMPORT PROFILE FROM FIRST APP === */
+  function showProfileSummary() {
+    var normalized = window.CareerScoring.normalizeProfile(currentScoringProfile());
+    var tags = [normalized.degree, normalized.major].filter(Boolean);
+    normalized.evidence.forEach(function(item){ tags.push(item.text.slice(0,120)); });
+    document.getElementById('profileBadge').classList.remove('hidden');
+    document.getElementById('profileBadge').classList.add('flex');
+    document.getElementById('importedTags').innerHTML = tags.length ? tags.map(function(value){ return '<span class="tag tag-primary">' + esc(value) + '</span>'; }).join('') : '<span class="text-xs text-slate-500">尚无经历原文，可先浏览或前往 <a href="/start" class="underline">轻量入口</a> 补充；无需完整测评。</span>';
+    document.getElementById('importedInfo').classList.remove('hidden');
+  }
+
   function importProfile() {
     try {
       var saved = localStorage.getItem('careerPredictor');
-      if (!saved) { alert('未找到能力档案。请先完成「职途星轨」的测评。'); return; }
-      var data = JSON.parse(saved);
-      userProfile = {};
-      if (data.experienceAnalysis) {
-        userProfile.keywords = data.experienceAnalysis.keywords || [];
-        userProfile.skills = data.experienceAnalysis.skills || [];
-        userProfile.tools = data.experienceAnalysis.tools || [];
-        userProfile.domains = data.experienceAnalysis.domains || [];
-        userProfile.abilityScores = data.experienceAnalysis.abilityScores || {};
-      }
-      if (data.softSkills) {
-        userProfile.softSkills = data.softSkills;
-      }
-      if (data.mbtiResult) {
-        userProfile.mbti = data.mbtiResult.type;
-      }
-      document.getElementById('profileBadge').classList.remove('hidden');
-      document.getElementById('profileBadge').classList.add('flex');
-      var tags = [];
-      if (userProfile.mbti) tags.push('<span class="tag tag-primary">MBTI: ' + esc(userProfile.mbti) + '</span>');
-      (userProfile.skills || []).forEach(function(s) { tags.push('<span class="tag tag-accent">' + esc(s) + '</span>'); });
-      (userProfile.domains || []).forEach(function(d) { tags.push('<span class="tag tag-success">' + esc(d) + '</span>'); });
-      (userProfile.tools || []).forEach(function(t) { tags.push('<span class="tag tag-primary">' + esc(t) + '</span>'); });
-      document.getElementById('importedTags').innerHTML = tags.join('');
-      document.getElementById('importedInfo').classList.remove('hidden');
-      if (userProfile.domains && userProfile.domains.length > 0) {
-        document.getElementById('searchQuery').value = userProfile.domains[0];
-      } else if (userProfile.skills && userProfile.skills.length > 0) {
-        document.getElementById('searchQuery').value = userProfile.skills[0];
-      }
-    } catch(e) {
-      console.error('Import failed:', e);
-      alert('导入失败，请重试。');
-    }
+      // Never import synthesized ability scores, soft-skill scores or old matching scores.
+      var data = saved ? JSON.parse(saved) : {};
+      userProfile = { experienceText:typeof data.experienceText === 'string' ? data.experienceText : '', studentProfile:data.studentProfile || {} };
+      showProfileSummary();
+    } catch (_) { alert('本地资料暂不可用，可前往轻量入口补充。'); }
   }
+
+  window.addEventListener('career-profile-updated', function() {
+    if (!window.CareerScoring) return;
+    showProfileSummary();
+    searchResults = searchResults.map(analyzeSearchJob);
+    if (searchResults.length) renderResults(searchResults, document.getElementById('searchQuery').value);
+    if (document.getElementById('manualJD').value.trim() && !document.getElementById('manualResult').classList.contains('hidden')) analyzeManualJD();
+  });
 
   /* === SEARCH JOBS === */
   function quickSearch(keyword) {
@@ -281,19 +268,10 @@
       if (!data.success) throw new Error(data.error || 'Search failed');
 
       searchResults = data.jobs || [];
-      if (userProfile) {
-        searchResults.forEach(function(job) {
-          job.matchScore = calculateMatchScore(job);
-          job.matchedSkills = getMatchedSkills(job);
-          job.gapSkills = getGapSkills(job);
-        });
-      } else {
-        searchResults.forEach(function(job) { job.matchScore = null; });
-      }
+      searchResults = searchResults.map(analyzeSearchJob);
       renderResults(searchResults, query);
     } catch(e) {
-      console.error('Search error:', e);
-      alert('搜索失败：' + e.message);
+      renderSearchFallback(query, location);
     } finally {
       document.getElementById('loadingState').classList.add('hidden');
       document.getElementById('searchBtn').disabled = false;
@@ -301,79 +279,27 @@
     }
   }
 
-  /* === MATCH SCORING === */
-  function calculateMatchScore(job) {
-    if (!userProfile) return null;
-    var text = (job.title + ' ' + job.snippet).toLowerCase();
-    var allUserKeywords = [].concat(
-      userProfile.keywords || [],
-      userProfile.skills || [],
-      userProfile.tools || [],
-      userProfile.domains || []
-    ).map(function(k) { return k.toLowerCase(); });
+  /* All entry points use the same rule version and normalized evidence. */
+  function analyzeSearchJob(job) {
+    return Object.assign({}, job, window.CareerScoring.evaluate(currentScoringProfile(), job));
+  }
+  function calculateMatchScore(job) { return window.CareerScoring.evaluate(currentScoringProfile(), job).score; }
+  function getMatchedSkills(job) { return window.CareerScoring.evaluate(currentScoringProfile(), job).matchedSkills; }
+  function getGapSkills(job) { return window.CareerScoring.evaluate(currentScoringProfile(), job).gapSkills; }
 
-    if (allUserKeywords.length === 0) return 50;
-
-    var matched = 0;
-    var total = 0;
-    Object.keys(skillKW).forEach(function(cat) {
-      skillKW[cat].forEach(function(kw) {
-        if (text.includes(kw.toLowerCase())) {
-          total++;
-          if (allUserKeywords.includes(kw.toLowerCase())) matched++;
-        }
-      });
-    });
-
-    allUserKeywords.forEach(function(uk) {
-      if (text.includes(uk) && uk.length > 1) {
-        matched += 0.5;
-        total += 1;
-      }
-    });
-
-    if (total === 0) return Math.floor(Math.random() * 30 + 30);
-    return Math.min(98, Math.max(15, Math.round(matched / total * 100)));
+  function safeJobURL(value) {
+    try { var url = new URL(value); return ['http:','https:'].includes(url.protocol) ? url.href : ''; } catch (_) { return ''; }
   }
 
-  function getMatchedSkills(job) {
-    if (!userProfile) return [];
-    var text = (job.title + ' ' + job.snippet).toLowerCase();
-    var userKWs = [].concat(
-      userProfile.keywords || [],
-      userProfile.skills || [],
-      userProfile.tools || [],
-      userProfile.domains || []
-    ).map(function(k) { return k.toLowerCase(); });
-    var matched = [];
-    Object.keys(skillKW).forEach(function(cat) {
-      skillKW[cat].forEach(function(kw) {
-        if (text.includes(kw.toLowerCase()) && userKWs.includes(kw.toLowerCase())) {
-          matched.push(kw);
-        }
-      });
-    });
-    return matched.filter(function(v, i, a) { return a.indexOf(v) === i; });
-  }
-
-  function getGapSkills(job) {
-    if (!userProfile) return [];
-    var text = (job.title + ' ' + job.snippet).toLowerCase();
-    var userKWs = [].concat(
-      userProfile.keywords || [],
-      userProfile.skills || [],
-      userProfile.tools || [],
-      userProfile.domains || []
-    ).map(function(k) { return k.toLowerCase(); });
-    var gaps = [];
-    Object.keys(skillKW).forEach(function(cat) {
-      skillKW[cat].forEach(function(kw) {
-        if (text.includes(kw.toLowerCase()) && !userKWs.includes(kw.toLowerCase())) {
-          gaps.push(kw);
-        }
-      });
-    });
-    return gaps.filter(function(v, i, a) { return a.indexOf(v) === i; });
+  function renderSearchFallback(query, location) {
+    searchResults = [];
+    document.getElementById('resultsSection').classList.remove('hidden');
+    document.getElementById('emptyState').classList.add('hidden');
+    document.getElementById('resultsSummary').textContent = '实时招聘检索暂不可用';
+    document.getElementById('overviewCards').innerHTML = '';
+    var keyword = [query, location].filter(Boolean).join(' ');
+    var url = 'https://www.zhipin.com/web/geek/job?query=' + encodeURIComponent(keyword);
+    document.getElementById('jobList').innerHTML = '<div class="card-flat p-5 border border-amber-200"><h3 class="font-semibold mb-2">为你保留检索方案</h3><p class="text-sm text-slate-600">以下是搜索入口，不是真实在招岗位。请在原站核实岗位、发布时间和要求。</p><p class="text-sm my-3">检索词：' + esc(keyword) + '</p><a class="btn-secondary inline-block text-sm" target="_blank" rel="noopener noreferrer" href="' + esc(url) + '">打开招聘检索</a><p class="text-xs text-slate-500 mt-3">也可使用下方“手动粘贴 JD”继续比较材料。</p></div>';
   }
 
   /* === RENDER RESULTS === */
@@ -383,18 +309,18 @@
     document.getElementById('resultsSummary').textContent = '找到 ' + jobs.length + ' 个相关岗位';
 
     var overviewHTML = '';
-    if (userProfile && jobs.length > 0) {
-      var scores = jobs.map(function(j){ return j.matchScore || 0; });
-      var avgScore = Math.round(scores.reduce(function(a,b){return a+b;},0) / scores.length);
+    if (jobs.length > 0) {
+      var scores = jobs.filter(function(j){ return typeof j.matchScore === 'number'; }).map(function(j){ return j.matchScore; });
+      var avgScore = scores.length ? Math.round(scores.reduce(function(a,b){return a+b;},0) / scores.length) + '%' : '待评估';
       var highMatch = jobs.filter(function(j){ return (j.matchScore||0) >= 70; }).length;
       var sources = {};
       jobs.forEach(function(j){ sources[j.source] = (sources[j.source]||0)+1; });
       var topSource = Object.keys(sources).sort(function(a,b){return sources[b]-sources[a];})[0] || '--';
-      overviewHTML = '<div class="card-flat p-4 text-center"><p class="text-2xl font-bold gradient-text">' + avgScore + '%</p><p class="text-xs text-slate-400">平均匹配度</p></div>' +
-        '<div class="card-flat p-4 text-center"><p class="text-2xl font-bold text-emerald-600">' + highMatch + '</p><p class="text-xs text-slate-400">高匹配岗位（70%以上）</p></div>' +
+      overviewHTML = '<div class="card-flat p-4 text-center"><p class="text-2xl font-bold gradient-text">' + avgScore + '</p><p class="text-xs text-slate-400">平均材料关键词覆盖</p></div>' +
+        '<div class="card-flat p-4 text-center"><p class="text-2xl font-bold text-emerald-600">' + highMatch + '</p><p class="text-xs text-slate-400">关键词覆盖 ≥70%</p></div>' +
         '<div class="card-flat p-4 text-center"><p class="text-2xl font-bold text-primary-600">' + jobs.length + '</p><p class="text-xs text-slate-400">搜索来源：' + esc(topSource) + '</p></div>';
     } else {
-      overviewHTML = '<div class="card-flat p-4 text-center col-span-full"><p class="text-sm text-slate-500">导入能力档案后可查看匹配度分析</p></div>';
+      overviewHTML = '<div class="card-flat p-4 text-center col-span-full"><p class="text-sm text-slate-500">可先浏览岗位，再用一句话或经历进行比较，无需完整测评</p></div>';
     }
     document.getElementById('overviewCards').innerHTML = overviewHTML;
 
@@ -403,20 +329,21 @@
       var scoreColor = '#64748B';
       var scoreLabel = '';
       if (job.matchScore !== null) {
-        if (job.matchScore >= 70) { scoreColor = '#10B981'; scoreLabel = '高匹配'; }
-        else if (job.matchScore >= 40) { scoreColor = '#F59E0B'; scoreLabel = '中等匹配'; }
-        else { scoreColor = '#EF4444'; scoreLabel = '低匹配'; }
+        if (job.matchScore >= 70) { scoreColor = '#10B981'; scoreLabel = '关键词覆盖高'; }
+        else if (job.matchScore >= 40) { scoreColor = '#F59E0B'; scoreLabel = '材料有对应'; }
+        else { scoreColor = '#EF4444'; scoreLabel = '对应材料少'; }
       }
-      listHTML += '<div class="job-card" onclick="showJobDetail(' + idx + ')" id="job-' + idx + '">';
+      listHTML += '<div class="job-card" onclick="showJobDetail(' + searchResults.indexOf(job) + ')" id="job-' + idx + '">';
       listHTML += '<div class="flex items-start justify-between gap-4">';
       listHTML += '<div class="flex-1 min-w-0">';
       listHTML += '<h4 class="font-semibold text-base mb-1 truncate">' + esc(job.title) + '</h4>';
       if (job.company) listHTML += '<p class="text-sm text-slate-500 mb-2">' + esc(job.company) + '</p>';
       listHTML += '<p class="text-xs text-slate-400 mb-2" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + esc(job.snippet) + '</p>';
       listHTML += '<div class="flex flex-wrap gap-1 items-center">';
-      if (job.matchScore !== null) {
+      if (typeof job.matchScore === 'number') {
         listHTML += '<span class="tag" style="background:' + scoreColor + '15;color:' + scoreColor + '">' + job.matchScore + '% ' + scoreLabel + '</span>';
       }
+      if (job.matchScore === null) listHTML += '<span class="tag">待评估 · 材料或要求不足</span>';
       listHTML += '<span class="source-badge">' + esc(job.source) + '</span>';
       if (job.matchedSkills && job.matchedSkills.length > 0) {
         listHTML += job.matchedSkills.slice(0,3).map(function(s){ return '<span class="skill-badge skill-matched">' + esc(s) + '</span>'; }).join('');
@@ -451,7 +378,7 @@
     html += '<div class="flex flex-wrap gap-2 items-center">';
     html += '<span class="source-badge">' + esc(job.source) + '</span>';
     if (job.publishTime) html += '<span class="text-xs text-slate-400">' + esc(job.publishTime) + '</span>';
-    if (job.url) html += '<a href="' + esc(job.url) + '" target="_blank" class="text-xs text-primary-600 hover:underline">查看原文 &#8599;</a>';
+    if (safeJobURL(job.url)) html += '<a rel="noopener noreferrer" href="' + esc(safeJobURL(job.url)) + '" target="_blank" class="text-xs text-primary-600 hover:underline">查看原文 &#8599;</a>';
     html += '</div>';
     if (job.matchScore !== null) {
       var scoreColor = job.matchScore >= 70 ? '#10B981' : job.matchScore >= 40 ? '#F59E0B' : '#EF4444';
@@ -461,15 +388,17 @@
       html += '</div></div>';
     }
     if (job.matchedSkills && job.matchedSkills.length > 0) {
-      html += '<div><p class="text-sm font-medium text-emerald-600 mb-2">&#10004; 你已具备的能力</p><div class="flex flex-wrap gap-1">';
+      html += '<div><p class="text-sm font-medium text-emerald-600 mb-2">&#10004; 材料中已提及</p><div class="flex flex-wrap gap-1">';
       job.matchedSkills.forEach(function(s) { html += '<span class="skill-badge skill-matched">' + esc(s) + '</span>'; });
       html += '</div></div>';
     }
     if (job.gapSkills && job.gapSkills.length > 0) {
-      html += '<div><p class="text-sm font-medium text-amber-600 mb-2">&#9888; 需要补强的能力</p><div class="flex flex-wrap gap-1">';
+      html += '<div><p class="text-sm font-medium text-amber-600 mb-2">&#9888; 材料尚未体现（不等于没有）</p><div class="flex flex-wrap gap-1">';
       job.gapSkills.forEach(function(s) { html += '<span class="skill-badge skill-gap">' + esc(s) + '</span>'; });
       html += '</div></div>';
     }
+    html += '<p class="text-xs text-slate-500">' + esc(job.explanation || '') + '</p>';
+    (job.hard_gates || []).forEach(function(gate){ html += '<p class="text-xs text-slate-600">' + esc(gate.requirement + '：' + gate.explanation) + '</p>'; });
     html += '<div><p class="text-sm font-medium text-slate-700 mb-2">岗位信息</p>';
     html += '<div class="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap bg-warm-50 rounded-lg p-4">' + esc(job.snippet) + '</div></div>';
     html += '</div>';
@@ -485,46 +414,16 @@
   function analyzeManualJD() {
     var jd = document.getElementById('manualJD').value.trim();
     if (!jd) { alert('请先粘贴 JD 内容'); return; }
-    var resultHTML = '<div class="card-flat p-4">';
-    if (userProfile) {
-      var text = jd.toLowerCase();
-      var userKWs = [].concat(
-        userProfile.keywords || [],
-        userProfile.skills || [],
-        userProfile.tools || [],
-        userProfile.domains || []
-      ).map(function(k) { return k.toLowerCase(); });
-      var matched = [];
-      var gaps = [];
-      Object.keys(skillKW).forEach(function(cat) {
-        skillKW[cat].forEach(function(kw) {
-          if (text.includes(kw.toLowerCase())) {
-            if (userKWs.includes(kw.toLowerCase())) matched.push(kw);
-            else gaps.push(kw);
-          }
-        });
-      });
-      var total = matched.length + gaps.length;
-      var score = total > 0 ? Math.round(matched.length / total * 100) : 50;
-      var scoreColor = score >= 70 ? '#10B981' : score >= 40 ? '#F59E0B' : '#EF4444';
-      resultHTML += '<div class="flex items-center gap-4 mb-4"><div class="text-center"><p class="text-3xl font-bold" style="color:' + scoreColor + '">' + score + '%</p><p class="text-xs text-slate-400">匹配度</p></div>';
-      resultHTML += '<div class="flex-1"><div class="match-bar"><div class="fill" style="width:' + score + '%;background:' + scoreColor + '"></div></div></div></div>';
-      if (matched.length > 0) {
-        resultHTML += '<p class="text-sm font-medium text-emerald-600 mb-2">&#10004; 已具备（' + matched.length + '）</p><div class="flex flex-wrap gap-1 mb-3">';
-        matched.forEach(function(s) { resultHTML += '<span class="skill-badge skill-matched">' + esc(s) + '</span>'; });
-        resultHTML += '</div>';
-      }
-      if (gaps.length > 0) {
-        resultHTML += '<p class="text-sm font-medium text-amber-600 mb-2">&#9888; 差距项（' + gaps.length + '）</p><div class="flex flex-wrap gap-1 mb-3">';
-        gaps.forEach(function(s) { resultHTML += '<span class="skill-badge skill-gap">' + esc(s) + '</span>'; });
-        resultHTML += '</div>';
-      }
-      resultHTML += '<p class="text-xs text-slate-400 mt-2">建议：' + (gaps.length > 0 ? '优先补强 ' + gaps.slice(0,3).join('、') + ' 等能力' : '你已具备该岗位的核心能力，可以大胆投递') + '</p>';
-    } else {
-      resultHTML += '<p class="text-sm text-slate-500">请先导入能力档案，再进行匹配分析。</p>';
-    }
-    resultHTML += '</div>';
-    document.getElementById('manualResult').innerHTML = resultHTML;
+    var result = window.CareerScoring.evaluate(currentScoringProfile(), jd);
+    var score = result.score;
+    var html = '<div class="card-flat p-4"><p class="text-3xl font-bold text-primary-600">' + (score === null ? '待评估' : score + '%') + '</p><p class="text-xs text-slate-500 mb-4">材料与 JD 关键词对应程度 · ' + esc(result.rule_version) + '</p>';
+    if (result.matchedSkills.length) html += '<p class="text-sm text-emerald-700 my-2">材料中提及：' + esc(result.matchedSkills.join('、')) + '</p>';
+    if (result.gapSkills.length) html += '<p class="text-sm text-amber-700 my-2">材料尚未体现：' + esc(result.gapSkills.join('、')) + '。未体现不等于没有。</p>';
+    result.hard_gates.forEach(function(gate){ html += '<p class="text-sm text-slate-600 my-2">' + esc(gate.requirement + '：' + gate.explanation) + '</p>'; });
+    result.evidence.forEach(function(item){ html += '<p class="text-xs text-slate-600 my-2">' + esc(item.term + ' · 原文：“' + item.quote + '” · ' + item.proficiency_note) + '</p>'; });
+    result.gapReasons.forEach(function(reason){ html += '<p class="text-xs text-slate-500 my-2">' + esc(reason) + '</p>'; });
+    html += '<p class="text-xs text-slate-500 mt-4">' + esc(result.explanation) + '</p><p class="text-sm mt-3">下一步：对照完整 JD，为一个关键要求补充真实行动或交付物；未知项可以保留。</p></div>';
+    document.getElementById('manualResult').innerHTML = html;
     document.getElementById('manualResult').classList.remove('hidden');
   }
 
@@ -541,7 +440,7 @@
       var saved = localStorage.getItem('careerPredictor');
       if (saved) {
         var data = JSON.parse(saved);
-        if (data.experienceAnalysis || data.softSkills) {
+        if (data.experienceText) {
           importProfile();
         }
       }

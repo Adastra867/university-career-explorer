@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>职途星轨 - 每条职业路径，都有自己的星轨</title>
   <meta name="description" content="从专业、能力与经历出发，用五步看见更适合你的方向，把模糊的可能，连成一条可以出发的路。">
+  <script type="module" src="/scripts/job-scoring.js"></script>
+  <script defer src="/p0/profile-adapter.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script async src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" integrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
@@ -192,6 +194,17 @@
 
     <!-- STEP 0: Homepage -->
     <section id="step0" class="step-section active">
+      <section class="card p-6 md:p-8 mt-4 mb-6 no-print" aria-labelledby="p0-entry-title">
+        <p class="text-sm text-primary-600 font-semibold mb-2">从眼前的问题开始</p>
+        <h2 id="p0-entry-title" class="text-2xl md:text-3xl font-bold mb-3">你现在最想解决哪件事？</h2>
+        <p class="text-sm text-slate-500 mb-5">写一句话就能开始，没有经历也可以。资料可跨模块复用，预览并明确提交后管理员才能查看。</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <a href="/start?task=explore_direction" class="radio-card block"><strong>我还不知道以后做什么</strong><span class="block text-xs text-slate-500 mt-1">从专业或困惑，找到 2—3 个探索方向</span></a>
+          <a href="/start?task=build_experience" class="radio-card block"><strong>我想知道现在可以做什么</strong><span class="block text-xs text-slate-500 mt-1">整理已有经历，或尝试一个入门小任务</span></a>
+          <a href="/start?task=find_opportunity" class="radio-card block"><strong>我想找实习或工作</strong><span class="block text-xs text-slate-500 mt-1">使用经历、简历或目标岗位，确定下一步</span></a>
+          <a href="/start?task=compare_options" class="radio-card block"><strong>我在几个选择之间犹豫</strong><span class="block text-xs text-slate-500 mt-1">按共同维度比较，找出需要核实的信息</span></a>
+        </div>
+      </section>
       <div class="text-center py-12 md:py-20">
         <div class="inline-flex items-center gap-2 bg-primary-50 text-primary-600 rounded-full px-4 py-1.5 text-sm font-medium mb-6">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
@@ -540,7 +553,7 @@
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
           </div>
           <p class="font-semibold">准备好后，自动搜索与你匹配的校招岗位</p>
-          <p class="text-sm text-slate-400 mt-1">系统先按前三意向检索，再在浏览器本地结合专业、软实力和经历证据计算匹配度。</p>
+          <p class="text-sm text-slate-400 mt-1">系统先按前三意向检索，再用统一资料与公开 JD 计算材料关键词覆盖；学历门槛单独说明。</p>
         </div>
         <div id="jobRecommendationResults" class="hidden">
           <div id="jobSearchOverview" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5"></div>
@@ -569,8 +582,8 @@
                 <p>粘贴 JD 并点击分析后，这里将展示：</p>
                 <ul class="list-disc list-inside mt-2 space-y-1">
                   <li>整体匹配度评分</li>
-                  <li>已具备的能力</li>
-                  <li>差距项与补强建议</li>
+                  <li>材料中提及的关键词</li>
+                  <li>尚未体现与核实建议</li>
                   <li>简历优化建议</li>
                 </ul>
               </div>
@@ -1406,20 +1419,20 @@
       allDirectionItems().find(function(item){ return item.id === id; }) || null;
   }
 
+  function scoringProfileForData(data) {
+    var cloud = window.CareerProfile && window.CareerProfile.profile;
+    if (data === appData && !historyViewMode && cloud && Object.keys(cloud.fields || {}).length) return cloud;
+    return data;
+  }
+
   function calculateOverallScoreForData(data) {
-    var total = 0;
-    var parts = 0;
+    // A report displays the same material/JD result as the matching entry.
+    // Formal questionnaire scores remain a separate reference; they add no JD points.
     var jd = data.jdMatchResult;
-    var exp = data.experienceAnalysis;
-    var skills = data.softSkills || {};
-    if (jd && typeof jd.matchScore === 'number' && isFinite(jd.matchScore)) { total += jd.matchScore; parts++; }
-    if (exp && isPlainObject(exp.abilityScores)) {
-      var abilityValues = Object.keys(exp.abilityScores).map(function(key){ return Number(exp.abilityScores[key]); }).filter(isFinite);
-      if (abilityValues.length) { total += abilityValues.reduce(function(a,b){ return a+b; }, 0) / abilityValues.length; parts++; }
-    }
-    var skillValues = Object.keys(skills).map(function(key){ return Number(skills[key]); }).filter(isFinite);
-    if (skillValues.length) { total += skillValues.reduce(function(a,b){ return a+b; }, 0) / skillValues.length; parts++; }
-    return parts ? Math.round(total / parts) : null;
+    var job = data.selectedRecommendedJob;
+    var material = jd && jd.source === 'manual' ? data.manualJDText : job;
+    if (!material || !window.CareerScoring) return null;
+    return window.CareerScoring.evaluate(scoringProfileForData(data), material).score;
   }
 
   function hasMeaningfulTestData(data) {
@@ -2326,7 +2339,7 @@
     result.domains.forEach(function(d) { html += '<span class="tag tag-warn">' + esc(d) + '</span>'; });
     if (result.domains.length === 0) html += '<span class="text-xs text-slate-400">暂未识别到领域标签</span>';
     html += '</div></div>';
-    html += '<div class="mb-4"><p class="text-xs font-medium text-slate-500 mb-2">能力评估</p>';
+    html += '<div class="mb-4"><p class="text-xs font-medium text-slate-500 mb-2">本地材料整理指标（非能力评级，不用于岗位匹配）</p>';
     var as = result.abilityScores;
     var abilityLabels = { technicalSkill:'技术能力', domainKnowledge:'领域知识', execution:'执行力', achievement:'成果导向', communication:'沟通能力', leadership:'领导力' };
     Object.keys(as).forEach(function(k) {
@@ -2353,10 +2366,19 @@
      JD MATCHING
      ============================================ */
   function emptyJDResultHTML() {
-    return '<p>粘贴 JD 并点击“开始匹配”后，这里将展示：</p><ul class="list-disc list-inside mt-2 space-y-1"><li>整体匹配度</li><li>已具备的能力</li><li>差距项与补强建议</li><li>简历优化建议</li></ul>';
+    return '<p>粘贴 JD 并点击“开始匹配”后，这里将展示：</p><ul class="list-disc list-inside mt-2 space-y-1"><li>整体匹配度</li><li>材料中提及的关键词</li><li>尚未体现与核实建议</li><li>简历优化建议</li></ul>';
+  }
+
+  function refreshManualJDScoring() {
+    if (!appData.jdMatchResult || appData.jdMatchResult.source !== 'manual' || !appData.manualJDText || !window.CareerScoring) return;
+    var analysis = window.CareerScoring.evaluate(scoringProfileForData(appData), appData.manualJDText);
+    appData.jdMatchResult = Object.assign({}, analysis, { source:'manual', totalKeywords:analysis.keyword_coverage.total,
+      matched:analysis.matchedSkills.map(function(word){ return {word:word,cat:'auto'}; }),
+      gaps:analysis.gapSkills.map(function(word){ return {word:word,cat:'auto'}; }) });
   }
 
   function initJDStep() {
+    refreshManualJDScoring();
     var locationInput = document.getElementById('jobSearchLocation');
     if (locationInput) locationInput.value = (appData.jobSearchPreferences || {}).location || '';
     var jdInput = document.getElementById('jdInput');
@@ -2420,9 +2442,9 @@
   }
 
   function getHardSkillEvidence() {
-    var exp = appData.experienceAnalysis;
-    if (!exp) return [];
-    return uniqueTextItems([].concat(exp.keywords || [], exp.skills || [], exp.tools || [], exp.domains || []));
+    var material = window.CareerScoring.normalizeProfile(scoringProfileForData(appData));
+    var ownText = material.evidence.map(function(item){ return item.text; }).join('\n');
+    return window.CareerScoring.evaluate(scoringProfileForData(appData), ownText).matchedSkills;
   }
 
   function uniqueTextItems(items) {
@@ -2692,134 +2714,20 @@
   }
 
   function analyzeRecommendedJob(job) {
-    var direction = findDirectionById(job.matchedDirectionId) || getJobSearchDirections()[Math.max(0, (job.directionRank || 1) - 1)] || null;
-    var text = [job.title, job.company, job.snippet, job.description, job.matchedDirection, job.searchedRole].join(' ').toLowerCase();
-    var requirementText = [job.title, job.snippet, job.description].join(' ').toLowerCase();
-    var hardEvidence = getHardSkillEvidence();
-    var requirementTerms = [];
-    ['programming','tools','soft','domain'].forEach(function(cat) {
-      (skillKW[cat] || []).forEach(function(term){ if (textMatchesTerm(requirementText, term)) requirementTerms.push(term); });
-    });
-    requirementTerms = uniqueTextItems(requirementTerms.concat(direction ? direction.skills.filter(function(term){ return textMatchesTerm(requirementText, term); }) : []));
-    var matchedSkills = requirementTerms.filter(function(term){ return userHasTerm(hardEvidence, term); });
-    var gapSkills = requirementTerms.filter(function(term){ return !userHasTerm(hardEvidence, term); });
-    var weighted = 0;
-    var availableWeight = 0;
-    var reasons = [];
-    var gaps = [];
-
-    var rankIndex = Math.max(0, (job.directionRank || 1) - 1);
-    var rankPercent = [100,90,82][rankIndex] || 75;
-    var roleHit = direction && direction.jobs.some(function(role){ return roleMatchesText(requirementText, role); });
-    var directionPercent = Math.min(100, rankPercent + (roleHit ? 0 : -8));
-    weighted += directionPercent * 20; availableWeight += 20;
-    reasons.push('属于你的第' + (rankIndex + 1) + '意向“' + (direction ? direction.direction : job.matchedDirection || job.searchedRole) + '”');
-
-    if (appData.experienceAnalysis && requirementTerms.length) {
-      var hardPercent = Math.round(matchedSkills.length / requirementTerms.length * 100);
-      weighted += hardPercent * 35; availableWeight += 35;
-      if (matchedSkills.length) reasons.push('经历材料已体现：' + matchedSkills.slice(0,4).join('、'));
-      if (gapSkills.length) gaps.push('现有经历材料未体现：' + gapSkills.slice(0,4).join('、'));
-    } else if (appData.experienceAnalysis) {
-      gaps.push('公开JD未提供足够技能要求，硬实力维度暂未计分');
-    } else {
-      gaps.push('尚未完成硬实力解析，技能匹配暂未计分');
-    }
-
-    var softScores = appData.softSkills || {};
-    if (Object.keys(softScores).length) {
-      var model = getRoleSoftModel(text);
-      var modelWeight = 0;
-      var softTotal = 0;
-      Object.keys(model).forEach(function(key){ if (typeof softScores[key] === 'number') { softTotal += softScores[key] * model[key]; modelWeight += model[key]; } });
-      if (modelWeight > 0) {
-        var softPercent = softTotal / modelWeight;
-        weighted += softPercent * 15; availableWeight += 15;
-        var softNames = { communication:'沟通', leadership:'领导', collaboration:'协作', analysis:'分析', execution:'执行', stress:'抗压', learning:'学习', adaptability:'适应', empathy:'共情' };
-        var relevantStrengths = Object.keys(model).filter(function(key){ return (softScores[key] || 0) >= 65; }).sort(function(a,b){ return (softScores[b]||0)-(softScores[a]||0); });
-        if (relevantStrengths.length) reasons.push('软实力优势吻合：' + relevantStrengths.slice(0,3).map(function(key){ return softNames[key] + ' ' + softScores[key]; }).join('、'));
-      }
-    } else {
-      gaps.push('尚未完成软实力测评，该维度暂未计分');
-    }
-
-    var educationText = requirementText;
-    var educationPercent = null;
-    var eligibility = 'uncertain';
-    var profileEducation = (appData.studentProfile || {}).education;
-    var undergraduateOnly = /(仅限|只招|仅面向)[^。；\n]{0,8}本科(?!\s*(?:及以上|或硕士|、硕士))(?:生|学历)?/.test(educationText);
-    var doctorateOnly = /(仅限|最低学历|学历要求)[^。；\n]{0,10}博士|博士(?:研究生)?(?:学历|及以上)/.test(educationText);
-    var graduateOnly = /(仅限|最低学历|学历要求)[^。；\n]{0,10}(硕士|研究生)|(硕士|研究生)(?:学历|及以上)/.test(educationText) && !/本科及以上|本科.{0,10}(硕士|研究生)/.test(educationText);
-    if (undergraduateOnly) {
-      if (profileEducation === 'undergraduate') { educationPercent = 100; eligibility = 'eligible'; reasons.push('本科生身份与公开要求吻合'); }
-      else { educationPercent = 0; eligibility = 'ineligible'; gaps.unshift('公开JD明确仅面向本科生，研究生不符合该身份门槛'); }
-    } else if (doctorateOnly) {
-      educationPercent = 0; eligibility = 'ineligible';
-      gaps.unshift('公开JD明确要求博士学历，与你填写的学历层次不符');
-    } else if (graduateOnly) {
-      if (profileEducation === 'graduate') { educationPercent = 100; eligibility = 'eligible'; reasons.push('研究生学历与公开要求吻合'); }
-      else { educationPercent = 0; eligibility = 'ineligible'; gaps.unshift('公开JD明确要求硕士/研究生，本科生不符合该学历门槛'); }
-    } else if (/本科|本科及以上|大专及以上|专科及以上|学历不限/.test(educationText)) {
-      educationPercent = 100; eligibility = 'eligible'; reasons.push('学历层次与公开要求吻合');
-    } else {
-      gaps.push('公开信息未明确学历或毕业届次，投递前需核验');
-    }
-    if (educationPercent !== null) { weighted += educationPercent * 10; availableWeight += 10; }
-
-    var profileMajor = String((appData.studentProfile || {}).major || '').trim();
-    var majorPercent = null;
-    var ownMajorDirections = majorDirectionCatalog[detectMajorGroup(profileMajor)] || majorDirectionCatalog.general;
-    var hasExplicitMajorRequirement = /专业要求|相关专业|专业背景|限[^。；\n]{0,8}专业/.test(requirementText);
-    if (/专业不限|不限专业/.test(requirementText)) {
-      majorPercent = 100;
-      reasons.push('公开JD标注专业不限');
-    } else if (profileMajor && textMatchesTerm(requirementText, profileMajor)) {
-      majorPercent = 100;
-      reasons.push('公开JD提及你的专业“' + profileMajor + '”');
-    } else if (hasExplicitMajorRequirement) {
-      gaps.push('公开JD包含专业要求，当前无法确认是否覆盖你的专业“' + profileMajor + '”');
-    } else if (direction && ownMajorDirections.some(function(item){ return item.id === direction.id; })) {
-      majorPercent = 85;
-      reasons.push('该方向来自你的专业相关路径，具体专业限制仍需核验');
-    }
-    if (majorPercent !== null) { weighted += majorPercent * 5; availableWeight += 5; }
-
-    if (appData.experienceAnalysis && appData.experienceAnalysis.abilityScores) {
-      var ability = appData.experienceAnalysis.abilityScores;
-      var evidenceValues = ['technicalSkill','domainKnowledge','execution','achievement'].map(function(key){ return ability[key]; }).filter(function(value){ return typeof value === 'number'; });
-      if (evidenceValues.length) {
-        var evidencePercent = evidenceValues.reduce(function(sum,value){ return sum+value; },0) / evidenceValues.length;
-        weighted += evidencePercent * 10; availableWeight += 10;
-      }
-    }
-
-    var isCampusPosting = /校招|校园招聘|应届|毕业生|实习/.test(requirementText);
-    if (isCampusPosting) { weighted += 100 * 5; availableWeight += 5; }
-    else gaps.push('页面未明确标注校招或应届生范围，请打开原文核验');
-    if (job.freshnessStatus === 'possibly_stale') gaps.unshift('该页面可能是往届招聘信息，请先核验发布时间与投递入口');
-    else if (job.freshnessStatus === 'unknown') gaps.push('来源未提供可确认的发布时间，请在原页面核验是否仍在招聘');
-
-    var rawScore = availableWeight ? weighted / availableWeight : 50;
-    var coverage = availableWeight / 100;
-    var score = availableWeight >= 40 ? Math.round(50 + (rawScore - 50) * (0.5 + 0.5 * coverage)) : null;
-    if (score !== null) score = Math.min(96, Math.max(20, score));
-    var confidence = coverage >= .85 ? '高' : coverage >= .6 ? '中' : '初步';
-    return Object.assign({}, job, {
-      matchScore:score,
-      matchCoverage:Math.round(coverage * 100),
-      confidence:confidence,
-      eligibility:eligibility,
-      matchedSkills:matchedSkills,
-      gapSkills:gapSkills,
-      matchReasons:uniqueTextItems(reasons).slice(0,5),
-      gapReasons:uniqueTextItems(gaps).slice(0,5)
-    });
+    var analysis = window.CareerScoring.evaluate(scoringProfileForData(appData), job);
+    if (job.freshnessStatus === 'possibly_stale') analysis.gapReasons.unshift('该页面可能是往届招聘信息，请先核验发布时间与投递入口');
+    else if (job.freshnessStatus === 'unknown') analysis.gapReasons.push('来源未提供可确认的发布时间，请在原页面核验是否仍在招聘');
+    return Object.assign({}, job, analysis, { scoringExplanation:analysis.explanation });
   }
 
   function buildRecommendedJDResult(job) {
     return {
       source:'recommended',
-      matchScore:job.eligibility === 'ineligible' ? null : (typeof job.matchScore === 'number' ? job.matchScore : null),
+      rule_version:job.rule_version,
+      explanation:job.scoringExplanation || job.explanation,
+      hard_gates:job.hard_gates,
+      evidence:job.evidence,
+      matchScore:typeof job.matchScore === 'number' ? job.matchScore : null,
       totalKeywords:(job.matchedSkills || []).length + (job.gapSkills || []).length,
       matched:(job.matchedSkills || []).map(function(word){ return { word:word, cat:'auto' }; }),
       gaps:(job.gapSkills || []).map(function(word){ return { word:word, cat:'auto' }; }),
@@ -2868,10 +2776,10 @@
   function scoreDisplay(score, eligibility) {
     if (eligibility === 'ineligible') return { label:'不符合', color:'#EF4444', level:'学历门槛' };
     if (score === null || typeof score !== 'number') return { label:'待评估', color:'#64748B', level:'资料不足' };
-    if (score >= 80) return { label:score + '%', color:'#10B981', level:'高度匹配' };
-    if (score >= 65) return { label:score + '%', color:'#4F46E5', level:'较匹配' };
+    if (score >= 80) return { label:score + '%', color:'#10B981', level:'关键词覆盖高' };
+    if (score >= 65) return { label:score + '%', color:'#4F46E5', level:'材料有对应' };
     if (score >= 50) return { label:score + '%', color:'#F59E0B', level:'可探索' };
-    return { label:score + '%', color:'#EF4444', level:'差距较大' };
+    return { label:score + '%', color:'#EF4444', level:'对应材料少' };
   }
 
   function renderGuidedJobSearch(meta) {
@@ -2964,7 +2872,7 @@
     document.getElementById('jobSearchOverview').innerHTML = [
       { value:jobs.length, label:'检索结果' },
       { value:average === null ? '--' : average + '%', label:'平均材料匹配度' },
-      { value:highCount, label:'高度匹配' },
+      { value:highCount, label:'关键词覆盖 ≥80%' },
       { value:officialCount + ' / ' + platformCount, label:'官网 / 平台' }
     ].map(function(item){ return '<div class="card p-4 text-center"><p class="text-2xl font-bold gradient-text">' + esc(String(item.value)) + '</p><p class="text-xs text-slate-400 mt-1">' + esc(item.label) + '</p></div>'; }).join('');
     var sourceStatus = meta.sourceStatus || {};
@@ -2993,8 +2901,8 @@
         '<div class="flex items-start gap-4"><div class="flex-1 min-w-0"><div class="flex flex-wrap gap-2 items-center mb-2"><span class="source-badge ' + badgeClass + '">' + esc(job.sourceType || '招聘来源') + '</span>' + freshnessBadge + eligibilityBadge + '<span class="text-xs text-slate-400">' + esc(job.source || '') + '</span>' + (job.publishTime ? '<span class="text-xs text-slate-400">' + esc(job.publishTime) + '</span>' : '') + '</div>' +
         '<h4 class="text-lg font-bold">' + esc(job.title || '校招岗位') + '</h4><p class="text-sm text-slate-500 mt-1">' + esc(jobFacts.join(' · ')) + ' · 对应“' + esc(job.matchedDirection || job.searchedRole || '已选方向') + '”</p></div>' +
         '<div class="w-20 h-20 rounded-full flex flex-col items-center justify-center flex-shrink-0" style="border:3px solid ' + display.color + '"><span class="font-bold" style="color:' + display.color + '">' + esc(display.label) + '</span><span class="text-[10px] text-slate-400">' + esc(display.level) + '</span></div></div>' +
-        '<div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4"><div class="rounded-lg bg-emerald-50 p-3"><p class="text-xs font-semibold text-emerald-700 mb-2">匹配依据</p>' + (job.matchReasons.length ? job.matchReasons.map(function(reason){ return '<p class="text-xs text-emerald-700 mt-1">&#10003; ' + esc(reason) + '</p>'; }).join('') : '<p class="text-xs text-emerald-700">资料不足，暂按方向初步匹配</p>') + '</div>' +
-        '<div class="rounded-lg bg-amber-50 p-3"><p class="text-xs font-semibold text-amber-700 mb-2">核验与差距</p>' + (job.gapReasons.length ? job.gapReasons.map(function(reason){ return '<p class="text-xs text-amber-700 mt-1">&#8226; ' + esc(reason) + '</p>'; }).join('') : '<p class="text-xs text-amber-700">未发现明显差距，仍需核对完整JD</p>') + '</div></div>' +
+        '<div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4"><div class="rounded-lg bg-emerald-50 p-3"><p class="text-xs font-semibold text-emerald-700 mb-2">匹配依据</p>' + (job.matchReasons.length ? job.matchReasons.map(function(reason){ return '<p class="text-xs text-emerald-700 mt-1">&#10003; ' + esc(reason) + '</p>'; }).join('') : '<p class="text-xs text-emerald-700">尚无可用的对应材料，暂不评分</p>') + '</div>' +
+        '<div class="rounded-lg bg-amber-50 p-3"><p class="text-xs font-semibold text-amber-700 mb-2">尚未体现与待核验</p>' + (job.gapReasons.length ? job.gapReasons.map(function(reason){ return '<p class="text-xs text-amber-700 mt-1">&#8226; ' + esc(reason) + '</p>'; }).join('') : '<p class="text-xs text-amber-700">未发现明显差距，仍需核对完整JD</p>') + '</div></div>' +
         '<details class="mt-4 rounded-lg border border-slate-200 bg-warm-50"><summary class="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-600">查看 JD 描述 <span class="text-xs font-normal text-slate-400">（' + esc(job.descriptionType || '来源摘要') + '）</span></summary><div class="job-description border-t border-slate-200 p-4 text-sm text-slate-600">' + esc(description) + '</div></details>' +
         '<div class="flex flex-col sm:flex-row gap-2 mt-4"><button onclick="selectRecommendedJob(' + index + ')" class="' + (isSelected ? 'btn-secondary' : 'btn-primary') + ' text-sm py-2 px-4">' + (isSelected ? '已设为目标岗位' : '设为目标岗位') + '</button><button onclick="useRecommendedJobForManual(' + index + ')" class="btn-secondary text-sm py-2 px-4">带入公开 JD 深入分析</button>' +
         (url ? '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" class="btn-secondary text-sm py-2 px-4 text-center">查看原岗位 &#8599;</a>' : '') + '</div></article>';
@@ -3040,27 +2948,12 @@
     if (!jd) { alert('请先粘贴目标岗位 JD'); return; }
     appData.manualJDText = jd;
     appData.jdMode = 'manual';
-    var exp = appData.experienceAnalysis;
-    if (!exp || exp.keywords.length === 0) { alert('请先在"硬实力解析"中输入你的经历'); return; }
-    var jdKeywords = [];
-    Object.keys(skillKW).forEach(function(cat) {
-      skillKW[cat].forEach(function(kw) {
-        if (jd.includes(kw)) jdKeywords.push({ word:kw, cat:cat });
-      });
+    var analysis = window.CareerScoring.evaluate(scoringProfileForData(appData), jd);
+    var result = Object.assign({}, analysis, {
+      source:'manual', totalKeywords:analysis.keyword_coverage.total,
+      matched:analysis.matchedSkills.map(function(word){ return { word:word, cat:'auto' }; }),
+      gaps:analysis.gapSkills.map(function(word){ return { word:word, cat:'auto' }; })
     });
-    jdKeywords = jdKeywords.filter(function(v,i,a){ return a.findIndex(function(x){return x.word===v.word;})===i; });
-    var userKWs = exp.keywords.map(function(k){return k.toLowerCase();});
-    var matched = jdKeywords.filter(function(jk){ return userKWs.includes(jk.word.toLowerCase()); });
-    var gaps = jdKeywords.filter(function(jk){ return !userKWs.includes(jk.word.toLowerCase()); });
-    var matchScore = jdKeywords.length > 0 ? Math.round(matched.length / jdKeywords.length * 100) : 0;
-    var result = {
-      source:'manual',
-      matchScore: matchScore,
-      totalKeywords: jdKeywords.length,
-      matched: matched,
-      gaps: gaps,
-      jdKeywords: jdKeywords
-    };
     appData.selectedRecommendedJob = null;
     appData.jdMatchResult = result;
     saveToLocalStorage();
@@ -3069,29 +2962,20 @@
   }
 
   function renderJDResult(result) {
-    var html = '';
-    var scoreColor = result.matchScore >= 70 ? '#10B981' : result.matchScore >= 40 ? '#F59E0B' : '#EF4444';
-    html += '<div class="text-center mb-4"><p class="text-4xl font-bold" style="color:' + scoreColor + '">' + result.matchScore + '%</p><p class="text-xs text-slate-400">整体匹配度</p></div>';
-    html += '<div class="mb-4"><p class="text-xs font-medium text-emerald-600 mb-2">&#10004; 已具备的能力（' + result.matched.length + '）</p><div class="flex flex-wrap gap-1">';
+    var score = result.matchScore;
+    var display = scoreDisplay(score, result.eligibility);
+    var html = '<div class="text-center mb-4"><p class="text-4xl font-bold" style="color:' + display.color + '">' + esc(display.label) + '</p><p class="text-xs text-slate-400">材料与 JD 关键词对应程度</p></div>';
+    html += '<p class="text-xs text-slate-500 mb-4">' + esc(result.explanation || '匹配分表示材料与 JD 的对应程度，不代表录用概率；关键词提及不证明熟练程度。') + '</p>';
+    html += '<div class="mb-4"><p class="text-xs font-medium text-emerald-600 mb-2">材料中已提及（' + result.matched.length + '）</p><div class="flex flex-wrap gap-1">';
     result.matched.forEach(function(m) { html += '<span class="tag tag-success">' + esc(m.word) + '</span>'; });
-    if (result.matched.length === 0) html += '<span class="text-xs text-slate-400">暂未匹配到相关能力</span>';
-    html += '</div></div>';
-    html += '<div class="mb-4"><p class="text-xs font-medium text-amber-600 mb-2">&#9888; 差距项（' + result.gaps.length + '）</p><div class="flex flex-wrap gap-1">';
+    if (!result.matched.length) html += '<span class="text-xs text-slate-400">暂未找到对应材料</span>';
+    html += '</div></div><div class="mb-4"><p class="text-xs font-medium text-amber-600 mb-2">材料尚未体现（' + result.gaps.length + '）</p><div class="flex flex-wrap gap-1">';
     result.gaps.forEach(function(g) { html += '<span class="tag tag-warn">' + esc(g.word) + '</span>'; });
-    if (result.gaps.length === 0) html += '<span class="text-xs text-slate-400">无明显差距</span>';
-    html += '</div></div>';
-    html += '<div class="mb-4"><p class="text-xs font-medium text-slate-500 mb-2">简历优化建议</p><ul class="text-xs text-slate-600 space-y-1 list-disc list-inside">';
-    if (result.gaps.length > 0) {
-      var gapCats = {};
-      result.gaps.forEach(function(g) { if (!gapCats[g.cat]) gapCats[g.cat] = []; gapCats[g.cat].push(g.word); });
-      if (gapCats.programming) html += '<li>建议学习或提升以下技术：' + gapCats.programming.join('、') + '</li>';
-      if (gapCats.tools) html += '<li>建议熟悉以下工具：' + gapCats.tools.join('、') + '</li>';
-      if (gapCats.soft) html += '<li>建议在简历中突出以下能力：' + gapCats.soft.join('、') + '</li>';
-      if (gapCats.domain) html += '<li>建议补充以下领域经验：' + gapCats.domain.join('、') + '</li>';
-    }
-    html += '<li>针对 JD 关键词调整简历措辞，提高 ATS 通过率</li>';
-    html += '<li>用量化数据展示成果，如"提升了 XX%"而非"负责 XX"</li>';
-    html += '</ul></div>';
+    html += '</div><p class="text-xs text-slate-400 mt-2">未体现不等于没有该能力，请仅补充真实经历。</p></div>';
+    (result.hard_gates || []).forEach(function(gate){ html += '<p class="text-xs text-slate-600 mb-2">' + esc(gate.requirement + '：' + gate.explanation) + '</p>'; });
+    (result.evidence || []).forEach(function(item){ html += '<p class="text-xs text-slate-600 mb-2">' + esc(item.term + ' · 原文：“' + item.quote + '” · ' + item.proficiency_note) + '</p>'; });
+    if (score === null) html += '<p class="text-sm text-amber-700">暂无有效材料或 JD 要求，暂不评分。可以保留未知项，先查看岗位任务。</p>';
+    html += '<p class="text-xs text-slate-500 mt-3">下一步：对照完整 JD，核实硬门槛，并为一个关键要求补充可核实的行动或交付物。规则：' + esc(result.rule_version || '历史结果，需重新分析') + '</p>';
     document.getElementById('matchResultContent').innerHTML = html;
   }
 
@@ -3116,6 +3000,7 @@
   }
 
   function buildReport() {
+    refreshManualJDScoring();
     if (!historyViewMode && hasMeaningfulTestData(appData)) appData.reportGenerated = true;
     var mbti = appData.mbtiResult;
     var skills = appData.softSkills || {};
@@ -3206,8 +3091,8 @@
       '<p>- “本专业/跨专业”只是探索起点；应通过真实JD、从业者访谈和实践项目持续验证。</p>' +
       '<p>- 招聘要求和就业市场会变化，请以近期企业校招信息、学校就业信息和实际岗位为准。</p>' +
       '<p>- MBTI 只反映偏好倾向，不代表能力上限，也不应单独决定职业。</p>' +
-      (jd && typeof jd.matchScore === 'number' && jd.matchScore < 50 ? '<p>- 当前与目标岗位匹配度较低，建议制定系统性补强计划，循序渐进。</p>' : '') +
-      '<p class="mt-2 pt-2 border-t border-amber-200">- 本报告仅供职业探索参考，不构成职业承诺或心理诊断；测评与经历保存在浏览器本地，联网岗位搜索仅发送岗位关键词与城市。</p>';
+      (jd && typeof jd.matchScore === 'number' && jd.matchScore < 50 ? '<p>- 当前材料与目标 JD 对应的关键词较少，可先补充真实依据、核实关键要求。</p>' : '') +
+      '<p class="mt-2 pt-2 border-t border-amber-200">- 本报告仅供职业探索参考，不构成职业承诺或心理诊断；旧测评可保存在本机；启用统一资料后，相关资料按告知保存到服务端，明确提交后管理员才可见。联网岗位搜索发送岗位关键词与城市。</p>';
     updateHistoryViewUI();
     if (!historyViewMode) saveCurrentReportToHistory({ overallScore:overallScore });
   }
@@ -3231,12 +3116,12 @@
     var data = [];
     if (exp && exp.abilityScores) {
       data = [exp.abilityScores.technicalSkill||0, exp.abilityScores.domainKnowledge||0, exp.abilityScores.execution||0, exp.abilityScores.achievement||0];
-    } else { data = [50,50,50,50]; }
-    data.push(skills.communication||50, skills.leadership||50, skills.collaboration||50, skills.analysis||50, skills.stress||50, skills.learning||50);
+    } else { data = [null,null,null,null]; }
+    ['communication','leadership','collaboration','analysis','stress','learning'].forEach(function(key){ data.push(typeof skills[key] === 'number' ? skills[key] : null); });
     try {
       reportRadarChart = new window.Chart(ctx, {
         type: 'radar',
-        data: { labels: labels, datasets: [{ label:'综合评分', data: data, backgroundColor:'rgba(20,184,166,0.15)', borderColor:'#14B8A6', borderWidth:2, pointBackgroundColor:'#14B8A6', pointRadius:4 }] },
+        data: { labels: labels, datasets: [{ label:'本地规则与问卷参考（非岗位匹配分）', data: data, backgroundColor:'rgba(20,184,166,0.15)', borderColor:'#14B8A6', borderWidth:2, pointBackgroundColor:'#14B8A6', pointRadius:4 }] },
         options: { responsive:true, scales:{ r:{ beginAtZero:true, max:100, ticks:{ stepSize:20, font:{size:10} }, pointLabels:{font:{size:10}} } }, plugins:{legend:{display:false}} }
       });
     } catch(error) {
@@ -3331,6 +3216,21 @@
   function escAttr(s) {
     return esc(String(s == null ? '' : s)).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
+
+  window.addEventListener('career-profile-updated', function() {
+    if (historyViewMode || !window.CareerScoring) return;
+    appData.recommendedJobs = (appData.recommendedJobs || []).map(analyzeRecommendedJob);
+    syncSelectedRecommendedJob();
+    if (appData.jdMatchResult && appData.jdMatchResult.source === 'manual' && appData.manualJDText) {
+      var analysis = window.CareerScoring.evaluate(scoringProfileForData(appData), appData.manualJDText);
+      appData.jdMatchResult = Object.assign({}, analysis, { source:'manual', totalKeywords:analysis.keyword_coverage.total,
+        matched:analysis.matchedSkills.map(function(word){ return {word:word,cat:'auto'}; }),
+        gaps:analysis.gapSkills.map(function(word){ return {word:word,cat:'auto'}; }) });
+      if (document.getElementById('matchResultContent')) renderJDResult(appData.jdMatchResult);
+    }
+    if (document.getElementById('recommendedJobList')) renderRecommendedJobs();
+    if (document.getElementById('step5').classList.contains('active')) buildReport();
+  });
 
   /* ============================================
      INIT

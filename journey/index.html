@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#faf9f7">
+  <title>始于足下 · 从一个点开始</title>
+  <link rel="stylesheet" href="/journey/style.css">
+  <link rel="stylesheet" href="/journey/workspace.css">
+  <link rel="stylesheet" href="/journey/extensions.css">
+  <link rel="stylesheet" href="/journey/forest.css">
+  <link rel="stylesheet" href="/journey/ai-v11.css">
+</head>
+<body>
+  <section class="intro" id="intro" aria-label="开始探索">
+    <div class="intro-copy"><h1>始于足下</h1></div>
+    <button class="star" id="start" aria-label="点击光点，开始探索人生树"></button>
+    <p class="intro-instruction">点击光点 · 进入你的树木世界</p>
+    <span class="sr-only">从一个点开始，长出自己的路。按 Enter 或空格开始。</span>
+  </section>
+  <section id="treeHub" class="hub" aria-label="我的树" hidden inert>
+    <header class="hub-top"><div class="hub-wordmark"><span class="hub-sigil" aria-hidden="true">·</span>始于足下 <span class="brand-sub">我的树</span></div><div class="hub-top-right"><a class="btn ghost small" href="/index.html">职业测评 ↗</a><button class="btn ghost small" id="hubBackIntro">返回开幕</button></div></header>
+    <main class="hub-content">
+      <div class="hub-hero"><div><p class="hub-overline">YOUR FOREST · LIFE IN MANY DIRECTIONS</p><h2>你的人生，不止一棵树。</h2><p>有些树用来探索职业，有些留给生活、思想与热爱。<br>从今天开始，选择一个方向，或者回到尚未走完的那一棵。</p></div><div class="hub-art" aria-hidden="true"><svg viewBox="0 0 270 180"><path d="M28 90H101C135 90 133 38 178 38M101 90C135 90 133 142 178 142M101 90H181C203 90 207 65 231 65M181 90C203 90 207 115 236 115"/><circle cx="28" cy="90" r="7"/><circle cx="178" cy="38" r="5"/><circle cx="178" cy="142" r="5"/><circle cx="181" cy="90" r="5"/><circle cx="231" cy="65" r="4"/><circle cx="236" cy="115" r="4"/></svg></div></div>
+      <div id="libraryNotice" class="library-notice" role="status" hidden></div>
+      <section aria-labelledby="createTitle"><div class="hub-section-head"><div><h3 id="createTitle">从一棵新树开始</h3><p>先选择你想探索的世界，每一棵树都可以独立保存和继续编辑。</p></div></div>
+        <div class="hub-type-grid">
+          <button class="tree-type career" data-create="career"><span class="type-arrow" aria-hidden="true">↗</span><span class="type-emblem" aria-hidden="true">⌘</span><strong>职业树</strong><span class="type-desc">从专业、升学和就业出发，探索岗位、技能与成长。</span></button>
+          <button class="tree-type life" data-create="life"><span class="type-arrow" aria-hidden="true">↗</span><span class="type-emblem" aria-hidden="true">♧</span><strong>生活树</strong><span class="type-desc">梳理理想的生活方式、关系、健康、自由与日常。</span></button>
+          <button class="tree-type thought" data-create="thought"><span class="type-arrow" aria-hidden="true">↗</span><span class="type-emblem" aria-hidden="true">✧</span><strong>思想与热爱树</strong><span class="type-desc">记录哲学、欲望、创造、热爱，以及内心的疑问。</span></button>
+          <button class="tree-type blank" data-create="blank"><span class="type-arrow" aria-hidden="true">＋</span><span class="type-emblem" aria-hidden="true">＋</span><strong>空白自定义树</strong><span class="type-desc">从一个完全由自己命名的光点出发，不预设方向。</span></button>
+        </div>
+      </section>
+      <div class="hub-divider"></div>
+      <section aria-labelledby="savedTitle"><div class="hub-section-head"><div><h3 id="savedTitle">我的树木收藏</h3><p>重新打开时，分支和讨论仍属于它自己。</p></div><div class="saved-tools"><button class="btn ghost small" id="importTreeButton">导入树文件</button><input id="importTreeInput" type="file" accept=".json,application/json" aria-label="导入树 JSON 备份" hidden><span id="treeTotal" class="hub-saved-tally">0 棵树</span></div></div><div id="savedTrees" class="saved-grid"></div></section>
+      <p class="hub-foot">保存在当前浏览器本地，无账号云同步。更换浏览器或清除网站数据会影响保存。可导出 JSON 备份，其中包含本树的节点、对话与自愿记录的资料，请自行保管。</p>
+    </main>
+  </section>
+  <section id="missingTree" class="missing-tree" hidden inert><span class="hub-sigil" aria-hidden="true">·</span><h1>没有找到这棵树</h1><p>它可能已被删除，或保存在另一个浏览器中。</p><a class="btn primary" href="/trees" id="missingBack">← 返回我的树</a></section>
+  <div class="app" id="app" hidden inert>
+    <header class="topbar">
+      <div class="brand"><span class="brand-symbol" aria-hidden="true">·</span><span class="brand-name">始于足下</span><span class="brand-sub" id="currentTreeBadge">独立人生树画布</span></div>
+      <div class="top-actions"><a class="btn ghost legacy-link" href="/index.html">职业测评 ↗</a><button class="btn ghost" id="export">导出 JSON</button><button class="btn primary" id="save">保存</button><button class="btn ghost" id="backToTrees">← 返回我的树</button></div>
+    </header>
+    <div class="workspace">
+      <main class="mainpanel" id="mainpanel">
+        <div class="canvas-head"><div><div class="eyebrow" id="canvasKicker">YOUR LIFE, YOUR CHOICES</div><h2 id="canvasTitle">人生树 · 每一步都由你决定</h2><div class="muted" id="canvasDescription">从此刻出发，保留每一种可能。</div></div><div class="toolbar"><button class="btn" id="add">＋ 自由添加</button><button class="btn" id="multi" aria-pressed="false">多选比较</button></div></div>
+        <div class="toolstrip">
+          <input type="search" id="search" placeholder="查找节点…" aria-label="查找节点" maxlength="120"><button class="btn small" id="find">定位</button>
+          <button class="btn small" id="undo" aria-label="撤销" title="Ctrl / ⌘ + Z">↶ 撤销</button><button class="btn small" id="redo" aria-label="重做">↷ 重做</button>
+          <button class="btn small" id="fit">适应画布</button><button class="btn small" id="root">定位起点</button><button class="btn small" id="resetTree">清空画布</button><button class="btn small" id="paths">我的路径</button>
+          <select id="graphView" aria-label="人生图视角"><option value="all">完整人生</option><option value="career">职业视角</option><option value="values">思想与价值</option></select>
+          <select id="workspaceTool" aria-label="更多人生树工具"><option value="">更多工具…</option><option value="profile">资料授权</option><option value="research">资料核验</option><option value="compare">路线比较 / 报告</option><option value="plan">行动计划</option><option value="history">版本 / 时间轴</option><option value="reflections">私密反思</option><option value="privacy">导出 / 分享 / 导入</option></select>
+        </div>
+        <div class="storage-notice" id="storageNotice" hidden><span id="storageError"></span><button class="btn small" id="reloadDraft">读取另一页版本</button><button class="btn small" id="recoverDraft" hidden>采用恢复草稿</button></div>
+        <div class="canvas-wrapper" id="canvas" tabindex="0" aria-label="人生树画布，拖动留白平移，滚轮缩放，Tab 选择节点">
+          <div class="corner-guide">◈ 点击选择 · ＋ 继续生长 · 拖动节点调整</div>
+          <div class="tree" id="tree"><svg class="edge-layer" id="edges" aria-label="路径连线"></svg><div id="nodes"></div><div id="edgeLabels"></div><div id="ghosts"></div></div>
+          <div class="zoom-controls"><button class="btn small" id="zoomOut" aria-label="缩小画布">−</button><span id="zoomLabel">100%</span><button class="btn small" id="zoomIn" aria-label="放大画布">＋</button></div>
+          <div class="canvas-watermark">线的长度不代表时间、难度或成功率</div>
+        </div>
+        <div class="canvas-footer"><div><div id="status" class="selected-row"></div><div id="saveStatus" class="muted" role="status" aria-live="polite">仅保存在当前设备 / 浏览器</div></div><button class="btn small" id="renameTree">重命名树</button></div>
+        <section class="compare" id="comparison" aria-label="已选路线"></section>
+      </main>
+      <aside class="rightpanel" id="rightpanel" aria-label="节点详情和 AI 顾问">
+        <div class="righthead"><div class="eyebrow">A COMPANION, NOT A JUDGE</div><h3>陪你探索的 AI 顾问</h3><button class="btn small" id="modelSettings">模型设置 ⚙</button><div class="muted">读懂你选择的路径，决定权留给你。</div><div class="tabs"><button class="tab current" id="detailTab" data-tab="detail">◈ 节点 / 边详情</button><button class="tab" id="chatTab" data-tab="chat">✧ AI 共创</button></div></div>
+        <div class="panel-scroll" id="panelScroll"></div>
+        <section id="aiControls" hidden><label class="scope-label" for="scope">本次提供给模型的范围</label><select id="scope"><option value="path">当前完整路径</option><option value="node">仅当前节点</option><option value="selection">多选路线</option><option value="tree">整张树（排除私密节点）</option></select><div id="extensionConsent"></div><div class="muted privacy-note">私密节点与反思始终排除。档案和上传资料按单独授权使用；具体要求需有来源。</div><form class="chat-input" id="chatForm"><textarea id="question" rows="2" maxlength="2000" placeholder="问问这条路，或请 AI 提议新分支…" aria-label="向 AI 提问"></textarea><button class="btn primary" id="send" type="submit">发送 ↗</button></form><div class="ai-actions"><button class="btn small" id="propose">提议新分支</button><button class="btn small" id="cancelAI" hidden>取消请求</button><button class="btn ghost small" id="clearChat">清空对话</button></div></section>
+      </aside>
+    </div>
+    <nav class="bottomnav" aria-label="手机端导航"><button id="mobileTree" class="active">◇ 画布</button><button id="mobileAI">✧ AI / 详情</button><button id="mobilePaths">⇄ 路径比较</button></nav>
+  </div>
+  <dialog id="createTreeDialog" class="modal create-dialog" aria-labelledby="createTreeHeading"><form id="createTreeForm"><div class="eyebrow">A NEW BEGINNING</div><h3 id="createTreeHeading">新建职业树</h3><p class="muted" id="createTreeHint">从此刻出发，为新的可能取一个名字。</p><label for="treeName">这棵树的名字</label><input id="treeName" required maxlength="120" autocomplete="off"><label for="treeDescription">简短描述（可选）</label><textarea id="treeDescription" rows="2" maxlength="160" placeholder="这棵树想回答什么问题？"></textarea><p id="createTreeError" class="error" role="alert"></p><div class="modal-actions"><button class="btn ghost" id="cancelCreateTree" type="button">稍后再说</button><button class="btn primary" id="createTreeSubmit" type="submit">创建并进入画布 →</button></div></form></dialog>
+  <dialog id="growDialog" class="modal"><form id="growForm"><div class="eyebrow">GROW YOUR PATH</div><h3 id="growTitle">从这个点，长出下一步</h3><p class="muted">示例选项可多选，也可以自己写。示例未核验职业要求。</p><div class="modal-grid" id="choices"></div><label for="custom">自由添加</label><input id="custom" maxlength="120" placeholder="例如：材料科学与工程"><label for="newKind">节点类别</label><select id="newKind"></select><label for="newDescription">说明（选填）</label><textarea id="newDescription" maxlength="2000" rows="2"></textarea><p id="growError" class="error" role="alert"></p><div class="modal-actions"><button type="button" class="btn ghost" id="closeGrow">暂不选择</button><button type="submit" class="btn primary" id="confirmGrow">让分支生长 ↗</button></div></form></dialog>
+  <dialog id="confirmDialog" class="modal"><form method="dialog"><h3 id="confirmTitle">确认操作</h3><p id="confirmText" class="muted"></p><div class="modal-actions"><button class="btn ghost" value="cancel">取消</button><button class="btn primary" id="confirmAction" value="confirm">确认</button></div></form></dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="/journey/app.js"></script>
+</body>
+</html>

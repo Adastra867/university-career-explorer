@@ -1,0 +1,15 @@
+CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS guests(id TEXT PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE, csrf TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL, notice_version TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS profiles(owner_id TEXT PRIMARY KEY REFERENCES guests(id) ON DELETE CASCADE, data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS admins(id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, display_name TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS admin_sessions(token_hash TEXT PRIMARY KEY, admin_id TEXT NOT NULL REFERENCES admins(id) ON DELETE CASCADE, csrf TEXT NOT NULL, expires_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS campaigns(id TEXT PRIMARY KEY, admin_id TEXT NOT NULL REFERENCES admins(id), slug TEXT NOT NULL UNIQUE, open INTEGER NOT NULL DEFAULT 1, data TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS intakes(id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES guests(id) ON DELETE CASCADE, campaign_id TEXT REFERENCES campaigns(id), task_type TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS intake_owner ON intakes(owner_id);
+CREATE TABLE IF NOT EXISTS previews(id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES guests(id) ON DELETE CASCADE, intake_id TEXT NOT NULL REFERENCES intakes(id) ON DELETE CASCADE, payload TEXT NOT NULL, fingerprint TEXT NOT NULL, expires_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS submissions(id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES guests(id) ON DELETE CASCADE, intake_id TEXT NOT NULL REFERENCES intakes(id) ON DELETE CASCADE, campaign_id TEXT NOT NULL REFERENCES campaigns(id), chain_id TEXT NOT NULL, version INTEGER NOT NULL, previous_id TEXT, status TEXT NOT NULL DEFAULT 'submitted', snapshot TEXT, created_at TEXT NOT NULL, withdrawn_at TEXT, idempotency_key TEXT NOT NULL, request_fingerprint TEXT NOT NULL, UNIQUE(owner_id,idempotency_key));
+CREATE INDEX IF NOT EXISTS submission_campaign ON submissions(campaign_id,created_at);
+CREATE INDEX IF NOT EXISTS submission_chain ON submissions(owner_id,intake_id,campaign_id,version);
+CREATE TABLE IF NOT EXISTS turn_requests(owner_id TEXT NOT NULL REFERENCES guests(id) ON DELETE CASCADE, idempotency_key TEXT NOT NULL, intake_id TEXT NOT NULL REFERENCES intakes(id) ON DELETE CASCADE, fingerprint TEXT NOT NULL, response TEXT, created_at TEXT NOT NULL, PRIMARY KEY(owner_id,idempotency_key));
+CREATE TABLE IF NOT EXISTS imports(owner_id TEXT NOT NULL REFERENCES guests(id) ON DELETE CASCADE, import_id TEXT NOT NULL, fingerprint TEXT NOT NULL, PRIMARY KEY(owner_id,import_id));
+INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(1,datetime('now'));
