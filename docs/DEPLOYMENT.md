@@ -15,7 +15,7 @@
 | Root Directory | 留空，使用仓库根目录 |
 | Build / Start | `pnpm install --frozen-lockfile` / `pnpm start` |
 | 健康检查 | `/` |
-| 自动部署 | On Commit，监听 `main`；2026-11-04 已通过 Render API 核实启用 |
+| 自动部署 | On Commit，监听 `main`；API 开关已启用，但本次仓库更新未自动触发，连接待修复/重新验收 |
 
 保留这个服务和公网地址。日常更新不用重新创建仓库、Blueprint、服务或数据库。`render.yaml` 已记录构建、启动和自动部署设置；线上配置仍须以原服务控制台为准，提交 YAML 不代表现有服务一定自动同步配置。
 
@@ -36,7 +36,7 @@ pnpm start
 
 ## 后续一条命令更新
 
-在项目根目录、`main` 分支修改并保存代码后运行：
+完成下述 GitHub 网络和 Render Git 凭据检查后，在项目根目录、`main` 分支修改并保存代码后运行：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\deploy.ps1
@@ -53,6 +53,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\deploy.ps1
 脚本检查仓库、分支、冲突、敏感文件和远程更新，安装锁定依赖，运行语法和现有单元/API测试，然后提交修改并正常 Push；没有修改不会创建空提交。已有未推送提交也会同步。Push 后由 Render 自动构建，不要同时重复点 Manual Deploy。脚本成功仅代表 GitHub 已同步；还需在控制台确认最新 SHA 为 `live`，并验证公网。
 
 脚本拒绝落后或分叉的分支，也不会自动覆盖远程更新。此时先保存本地工作，用 `git fetch origin` 查看 `git log --oneline --left-right HEAD...origin/main`，无本地改动时可 `git merge --ff-only origin/main`；有改动时先审查并提交，在合并远程后解决冲突、重跑检查。不得使用 `git push --force`。
+
+### 2026-11-04 实测与当前待办
+
+本次 Windows PowerShell 5.1 脚本已实际执行：锁定依赖安装、35 个模块语法检查、278 项单元/API测试、工作区/index安全扫描及提交通过。原生 Git Push 遇到 GitHub HTTPS 连接失败，因此本次使用已授权 GitHub 连接发布同一代码树；代码树 SHA 为 `6e1963f4fc010669323060d88226297a744354b8`。原本地提交保存在 `codex/local-release-before-api-sync`，没有强推或丢弃原远程提交。
+
+原 Render 服务的 On Commit 开关虽为开启，但更新仓库后等待超过 3 分钟没有自动部署或忽略事件。本次通过原服务 API 部署成功。**自动部署整条链路尚未验收通过，不能仅凭开关判断成功。** 需要在 Render Account Settings → Git Deployment Credentials / 原服务 Settings → Git Credentials 检查连接，并确认 Render GitHub App 对本仓库有访问权限，保留 `main` + On Commit。现有 Render 连接工具不支持修改 Git 凭据/仓库绑定，本机也没有 Render CLI 登录配置；须由账号持有人完成这个连接步骤。不要重建服务。
+
+重新关联后，以一次有实际内容的文档或功能更新测试，确认 Deploy History 出现对应 SHA 的自动部署并达到 `live`。本机还需确保 `git fetch` / `git push` 可连接 GitHub；网络故障与 GitHub 登录是两件事，不要把 Token 写到仓库或反复创建新服务。
 
 敏感扫描是发布前辅助检查，不能代替人工审查。GitHub 登录由 Git Credential Manager 提供；不要把 Token 写进 Remote、脚本或命令输出。
 
