@@ -1,0 +1,13 @@
+import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { prepareDatabase, sanitizedEnvironment } from '../tests/helpers/environment.js';
+const require = createRequire(import.meta.url);
+const suite = process.argv[2];
+const url = await prepareDatabase(suite);
+const env = { ...sanitizedEnvironment(), NODE_ENV: 'test', TEST_DATABASE_URL: url, DATABASE_URL: url, AUTO_MIGRATE: 'true', LLM_API_KEY: '', DEEPSEEK_SEARCH_API_KEY: '' };
+console.log(`Running ${suite} against dedicated database ${new URL(url).pathname.slice(1)}; external AI credentials removed`);
+const args = suite === 'integration' ? ['--test', 'tests/integration.test.js', 'tests/database.test.js'] : [require.resolve('@playwright/test/cli'), 'test', ...process.argv.slice(3)];
+const child = spawn(process.execPath, args, { stdio: 'inherit', env });
+child.on('error', () => process.exit(1));
+child.on('exit', (code, signal) => process.exit(signal ? 1 : code ?? 1));
+for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child.kill(signal));

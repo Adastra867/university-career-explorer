@@ -71,7 +71,7 @@
   }
   const state = load();
   let session = null;
-  function save() { try { localStorage.setItem(STORE,JSON.stringify(state)); } catch (_) { $('targetStatus').textContent='本地存储不可用，当前输入可能无法在刷新后保留。'; } }
+  function save() { try { localStorage.setItem(STORE,JSON.stringify(state)); window.dispatchEvent(new Event("career-data-changed")); } catch (_) { $('targetStatus').textContent='本地存储不可用，当前输入可能无法在刷新后保留。'; } }
   function text(parent,tag,value,className) { const el=document.createElement(tag);el.textContent=value;if(className)el.className=className;parent.appendChild(el);return el; }
   function result(parent,title,detail) { const box=text(parent,'div','', 'result');text(box,'strong',title);text(box,'p',detail); }
   function requireTarget(statusId) { if (!state.stage || !state.confirmed || !state.role.trim()) { $(statusId).textContent='请先选择阶段、确认方向并填写目标岗位。';$('role').focus();return false; } $(statusId).textContent='';return true; }

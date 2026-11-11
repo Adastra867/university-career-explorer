@@ -3,7 +3,34 @@ services:
     name: university-career-explorer
     runtime: node
     plan: free
-    buildCommand: pnpm install --frozen-lockfile
-    startCommand: pnpm start
-    healthCheckPath: /
-    autoDeployTrigger: commit
+    buildCommand: pnpm install --frozen-lockfile --prod=false && pnpm build
+    startCommand: pnpm db:migrate && pnpm start
+    healthCheckPath: /api/health
+    autoDeployTrigger: off
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "true"
+      - key: APP_ORIGIN
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_SSL
+        value: "false"
+      - key: AUTO_MIGRATE
+        value: "false"
+      - key: LLM_API_URL
+        value: https://api.deepseek.com/chat/completions
+      - key: LLM_MODEL
+        value: deepseek-flash
+      - key: LLM_API_KEY
+        sync: false
+      - key: DEEPSEEK_SEARCH_ENABLED
+        value: "true"
+      - key: AI_DAILY_USER_LIMIT
+        value: "50"
+      - key: AI_DAILY_TOTAL_LIMIT
+        value: "500"

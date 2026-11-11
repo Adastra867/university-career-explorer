@@ -5,15 +5,42 @@
   "description": "Career Development Predictor with Job Search",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js",
-    "check": "node --check server.js"
+    "start": "node --env-file-if-exists=.env server.js",
+    "dev": "node --env-file-if-exists=.env --watch server.js",
+    "check": "node scripts/check.js",
+    "db:migrate": "node --env-file-if-exists=.env scripts/migrate.js",
+    "test": "node scripts/run-unit.js",
+    "test:e2e": "node --env-file-if-exists=.env scripts/run-suite.js e2e",
+    "test:integration": "node --env-file-if-exists=.env scripts/run-suite.js integration",
+    "evaluate:ai": "node --env-file-if-exists=.env scripts/evaluate-ai.js",
+    "build": "node scripts/build-assets.js",
+    "lint": "eslint src scripts tests server.js playwright.config.js eslint.config.js",
+    "verify": "node scripts/verify.js",
+    "test:coverage": "node scripts/verify.js --coverage",
+    "test:live": "node --env-file-if-exists=.env scripts/smoke-ai.js",
+    "audit:prod": "pnpm audit --prod --audit-level=high"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "coze-coding-dev-sdk": "^0.7.32",
-    "express": "^5.2.1"
-  }
+    "chart.js": "4.4.7",
+    "express": "^5.3.0",
+    "express-rate-limit": "^8.7.3",
+    "html2pdf.js": "0.14.0",
+    "pg": "^8.23.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.1",
+    "c8": "^12.0.0",
+    "eslint": "^10.14.0",
+    "globals": "^17.14.0",
+    "tailwindcss": "3.4.17"
+  },
+  "engines": {
+    "node": ">=22.14.0"
+  },
+  "packageManager": "pnpm@11.25.0"
 }

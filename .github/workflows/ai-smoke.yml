@@ -1,0 +1,31 @@
+name: Manual live AI smoke
+on:
+  workflow_dispatch:
+    inputs:
+      acknowledge_cost:
+        description: 'I authorize 3-4 billable DeepSeek calls with synthetic data'
+        required: true
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  live-smoke:
+    if: inputs.acknowledge_cost
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - run: pnpm install --frozen-lockfile
+      - name: Explicitly authorized live smoke
+        env:
+          LLM_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          LLM_API_URL: https://api.deepseek.com/chat/completions
+          LLM_MODEL: deepseek-flash
+        run: node scripts/smoke-ai.js

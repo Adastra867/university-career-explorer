@@ -35,3 +35,14 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# Browser test artifacts
+playwright-report/
+test-results/
+
+# Generated evaluation runs (may contain user data)
+artifacts/
+
+# Reproducible local frontend assets
+/public/assets/
+.c8/

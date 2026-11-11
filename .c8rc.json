@@ -1,0 +1,12 @@
+{
+  "all": true,
+  "include": ["src/**/*.js", "server.js", "public/js/matching.js"],
+  "exclude": ["tests/**", "scripts/**", "public/assets/**"],
+  "reporter": ["text", "lcov", "json-summary"],
+  "reports-dir": "coverage",
+  "check-coverage": true,
+  "lines": 85,
+  "statements": 85,
+  "functions": 90,
+  "branches": 65
+}

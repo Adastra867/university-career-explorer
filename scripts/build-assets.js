@@ -1,0 +1,11 @@
+import { copyFile, mkdir } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+const require = createRequire(import.meta.url);
+await mkdir('public/assets', { recursive: true });
+await copyFile(join(dirname(require.resolve('chart.js')), 'chart.umd.js'), 'public/assets/chart.umd.js');
+await copyFile(require.resolve('html2pdf.js/dist/html2pdf.bundle.min.js'), 'public/assets/html2pdf.bundle.min.js');
+const result = spawnSync(process.execPath, [require.resolve('tailwindcss/lib/cli.js'), '-c', 'tailwind.config.cjs', '-i', 'styles/tailwind.css', '-o', 'public/assets/tailwind.css', '--minify'], { stdio: 'inherit' });
+if (result.status !== 0) throw new Error('Tailwind asset build failed');
+console.log('Built local CSS, charts and PDF assets; pages need no external CDN');

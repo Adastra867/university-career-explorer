@@ -1,0 +1,73 @@
+name: Engineering checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verification:
+    name: Verification / Node 22 / PostgreSQL 17
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: career
+          POSTGRES_USER: career
+          POSTGRES_PASSWORD: ci-test-only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U career -d career"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://career:ci-test-only@127.0.0.1:5432/career
+    steps:
+      - uses: actions/checkout@v4
+      # pnpm 11 requires Node >=22. Install Node before invoking the pnpm action.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+          run_install: false
+      - run: pnpm install --frozen-lockfile
+      - name: Block known high-severity production dependencies
+        run: pnpm audit:prod
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Syntax, lint, build, unit, database, coverage and browser gates
+        run: pnpm test:coverage
+      - name: Upload verification evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verification-node22
+          path: |
+            artifacts/
+            coverage/
+            test-results/
+            playwright-report/
+          retention-days: 7
+  compatibility:
+    name: Compatibility / Node 24
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+          run_install: false
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm lint
+      - run: pnpm build
+      - run: pnpm test
