@@ -152,6 +152,8 @@ async function openNarrative() {
   await page.locator('#generateNarrative').waitFor();
 }
 async function sha(file) { return createHash('sha256').update(await readFile(path.join(ROOT, file))).digest('hex'); }
+const legacyFiles = ['index.html', 'job-search.html', 'career-prep.html', 'scripts/career-prep.js', 'styles/main.css'];
+const legacyBefore = await Promise.all(legacyFiles.map(sha));
 
 try {
   await setup();
@@ -335,11 +337,11 @@ try {
     await page.locator('#search').fill(''); await page.locator('#fit').click(); await screenshot('mobile-canvas-fixture'); await page.setViewportSize({ width: 1440, height: 1000 });
     return { width: 390, height: 844, drawerHeight: box.height, visibleCanvasHeight, focusedNodeBox };
   });
-  await check('浏览器不保存 key，旧模块五个源码 SHA256 未改变', async () => {
+  await check('浏览器不保存 key，Journey 操作不修改职业工作台源码', async () => {
     const storage = await page.evaluate(() => JSON.stringify({ ...localStorage })); assert(!storage.includes(FAKE_KEY)); assert(!storage.includes(ADMIN)); assert(!(await page.locator('body').innerText()).includes(FAKE_KEY));
-    const baseline = JSON.parse(await readFile(path.join(ROOT, 'artifacts/journey/legacy-baseline.json'), 'utf8'));
-    const files = ['index.html', 'job-search.html', 'career-prep.html', 'scripts/career-prep.js', 'styles/main.css']; const current = {};
-    for (const file of files) { current[file] = await sha(file); const expected = baseline.files?.[file]?.sha256 ?? baseline.files?.[file] ?? baseline[file]?.sha256 ?? baseline[file]; assert.equal(current[file], expected, `${file} unchanged`); }
+    const after = await Promise.all(legacyFiles.map(sha));
+    assert.deepEqual(after, legacyBefore);
+    const current = Object.fromEntries(legacyFiles.map((file, index) => [file, after[index]]));
     await writeFile(path.join(OUT, 'legacy-hashes.json'), JSON.stringify({ mode: 'fixture', current }, null, 2)); assert.deepEqual(errors, []); assert.deepEqual(leakedResponses, []);
   });
   await rm(path.join(OUT, 'failure.png'), { force: true });

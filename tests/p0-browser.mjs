@@ -40,9 +40,24 @@ try{
   const aIntake=(await json(a,'/api/intakes')).body.items[0];
   await check('刷新恢复任务且不重置追问预算',async()=>{await a.reload();await a.locator('#editor').waitFor({state:'visible'});assert.match(await a.locator('#mainInput').inputValue(),/没有项目和实习/);const after=(await json(a,'/api/intakes/'+aIntake.id)).body;assert.equal(after.question_count,aIntake.question_count);});
   await check('访客B独立草稿、TXT导入和跨访客隔离',async()=>{await b.goto(activity.url);await b.locator('#consentBtn').click();await b.locator('#workspace').waitFor({state:'visible'});await b.locator('[data-task="build_experience"]').click();await b.locator('#documentFile').setInputFiles({name:'fictional-resume.txt',mimeType:'text/plain',buffer:Buffer.from('大二，能源专业，做过太阳能电池实验，会一点 Python。','utf8')});await b.waitForFunction(()=>document.getElementById('saveStatus').textContent.includes('已保存到服务器'));const own=(await json(b,'/api/intakes')).body.items;assert.equal(own.length,1);assert.equal(own[0].input_source_type,'document_extract');assert.equal(own[0].result,null);const isolated=await json(b,'/api/intakes/'+aIntake.id);assert.equal(isolated.status,404);return{only_personal_draft:true};});
+  await check('通过主导航离开后，未上传草稿可从原任务 URL 恢复',async()=>{
+    const taskURL=b.url();
+    const draft='大二，能源专业，做过太阳能电池实验，会一点 Python。补充尚未上传的草稿。';
+    await b.route('**/api/intakes/*/draft', route=>route.abort('failed'));
+    await b.locator('#mainInput').fill(draft);
+    await b.locator('.career-nav [data-career-nav="jobs"]').click();
+    await b.locator('#step4.active').waitFor();
+    await b.goBack();
+    await b.locator('#editor').waitFor({state:'visible'});
+    assert.equal(b.url(),taskURL);
+    assert.equal(await b.locator('#mainInput').inputValue(),draft);
+    await b.unroute('**/api/intakes/*/draft');
+    await b.locator('#saveBtn').click();
+    await b.waitForFunction(()=>document.getElementById('saveStatus').textContent.includes('已保存到服务器'));
+  });
   const receipt=await check('预览范围、明确提交与管理员草稿隔离',async()=>{const before=await json(admin,'/api/admin/submissions');assert.equal(before.body.total,0);await a.locator('#previewBtn').click();await a.locator('#previewDialog').waitFor({state:'visible'});assert.match(await a.locator('#previewContent').innerText(),/虚构验收管理员/);assert.match(await a.locator('#previewContent').innerText(),/没有项目和实习/);await a.locator('#submitBtn').click();await a.locator('#previewDialog').waitFor({state:'hidden'});await a.waitForFunction(()=>document.getElementById('submissionList').textContent.includes('回执'));await admin.locator('#filterForm button').click();await admin.waitForFunction(()=>document.getElementById('pageLabel').textContent.includes('共 1 条'));const records=(await json(admin,'/api/admin/submissions')).body;assert.equal(records.total,1);const id=records.items[0].id;await admin.locator('#recordRows button').first().click();await admin.waitForFunction(()=>document.getElementById('detailStatus').textContent.includes('回执'));assert.match(await admin.locator('#detailContent').innerText(),/没有项目和实习/);return{id};});
   await check('答题响应丢失后刷新显式恢复原请求且不重复计数',async()=>{
-    await b.locator('[data-task="find_opportunity"]').click();await b.locator('#mainInput').fill('我想找实习');await b.locator('#generateBtn').click();await b.locator('#questionBox').waitFor({state:'visible'});
+    await b.locator('#intakeTaskPicker summary').click();await b.locator('[data-task="find_opportunity"]').click();await b.locator('#mainInput').fill('我想找实习');await b.locator('#generateBtn').click();await b.locator('#questionBox').waitFor({state:'visible'});
     let dropped=false;await b.route('**/api/intakes/*/turns',async route=>{const body=route.request().postDataJSON();if(body.action==='answer'&&!dropped){dropped=true;await route.fetch();await route.abort('failed');}else await route.continue();});
     await b.locator('#questionAnswer').fill('数据分析');await b.locator('#answerBtn').click();await b.locator('#pendingCard').waitFor({state:'visible'});assert.equal(dropped,true);
     const task=(await json(b,'/api/intakes')).body.items.find(item=>item.task_type==='find_opportunity');const before=(await json(b,'/api/intakes/'+task.id)).body;

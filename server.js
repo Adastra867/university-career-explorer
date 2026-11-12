@@ -58,6 +58,7 @@ if (process.env.JOURNEY_ENABLED !== 'false') {
   const journeyAssets = new Set(['index.html', 'style.css', 'workspace.css', 'extensions.css', 'forest.css', 'forest.js', 'app.js', 'graph.js', 'store.js', 'extensions.js', 'privacy.js', 'documents.js', 'legacy-adapter.js', 'planning.js', 'ai-v11.css', 'ai-store.js', 'ai-panels.js', 'ai-client.js', 'ai-context.js', 'ai-integration.js']);
   journeyAssets.add('forest-ai.js');
   journeyAssets.add('ai-legacy-migration.js');
+  journeyAssets.add('career-intelligence-tree.js');
   app.get('/journey/:asset', (req, res) => journeyAssets.has(req.params.asset)
     ? res.sendFile(join(__dirname, 'journey', req.params.asset))
     : res.status(404).send('Not found'));

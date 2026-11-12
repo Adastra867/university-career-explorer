@@ -1,8 +1,8 @@
 /* Shared server profile for legacy pages. Existing local records are never uploaded on load. */
 (() => {
   'use strict';
-  const NOTICE='careerP0Notice', LAST='careerP0LastIntake';
-  let csrf='',consented=false,queue=Promise.resolve(),timer=null,deleted=false;
+  const NOTICE='careerP0Notice', LAST='careerP0LastIntake', PENDING='careerP0PendingProfileFields';
+  let csrf='',consented=false,queue=Promise.resolve(),timer=null,deleted=false,flushing=false;
   const changedFields=new Map();
   const adapter={profile:null,currentIntake:null,ready:null,refresh,update,updateMany,isEditing:path=>changedFields.has(path)};
   window.CareerProfile=adapter;
@@ -14,29 +14,83 @@
   function applyLegacy(){
     try{
       if(typeof appData==='undefined'||!appData||typeof historyViewMode!=='undefined'&&historyViewMode)return;
-      const major=known('education.major'),degree=known('education.degree'),experience=known('experience.text');let changed=false;
-      if(!changedFields.has('education.major')&&major!=null&&appData.studentProfile.major!==major){appData.studentProfile.major=major;changed=true;}
-      if(!changedFields.has('education.degree')&&degree!=null){const mapped=/硕士|博士|研究生/.test(degree)?'graduate':/本科/.test(degree)?'undergraduate':'';if(appData.studentProfile.education!==mapped){appData.studentProfile.education=mapped;changed=true;}}
-      if(!changedFields.has('experience.text')&&experience!=null&&appData.experienceText!==experience){appData.experienceText=experience;appData.experienceAnalysis=null;changed=true;if(typeof initExperienceStep==='function')initExperienceStep();}
+      const major=known('education.major'),degree=known('education.degree'),experience=known('experience.text');let changed=false,directionChanged=false;
+      if(!changedFields.has('education.major')&&major!=null&&appData.studentProfile.major!==major){appData.studentProfile.major=major;changed=directionChanged=true;}
+      if(!changedFields.has('education.degree')&&degree!=null){const mapped=/硕士|博士|研究生/.test(degree)?'graduate':/本科/.test(degree)?'undergraduate':'';if(appData.studentProfile.education!==mapped){appData.studentProfile.education=mapped;changed=directionChanged=true;}}
+      if(!changedFields.has('experience.text')&&experience!=null&&appData.experienceText!==experience){appData.experienceText=experience;if(appData.experienceAnalysis&&appData.workspaceUpdates)appData.workspaceUpdates.hard=true;appData.experienceAnalysis=null;changed=true;if(typeof initExperienceStep==='function')initExperienceStep();}
       if(!changedFields.has('education.major')&&typeof restoreProfileControls==='function')restoreProfileControls();
-      if(changed){if(typeof markDirectionOptionsForRefresh==='function')markDirectionOptionsForRefresh();if(typeof renderAssistantProfile==='function')renderAssistantProfile();const old=document.getElementById('experienceResult');if(old&&experience!=null&&!appData.experienceAnalysis)old.textContent='统一资料已更新，使用此前资料生成的分析已过期，可重新分析。';}
-      if(adapter.currentIntake?.conditions?.jd){appData.manualJDText=adapter.currentIntake.conditions.jd;const jd=document.getElementById('jdInput');if(jd)jd.value=appData.manualJDText;}
+      if(changed){if(appData.workspaceUpdates){if(directionChanged&&appData.directionRanking.length)appData.workspaceUpdates.direction=true;if(appData.jdMatchResult||appData.jobSearchMeta)appData.workspaceUpdates.jobs=true;if(appData.reportGenerated)appData.workspaceUpdates.report=true;}if(typeof markDirectionOptionsForRefresh==='function')markDirectionOptionsForRefresh();if(typeof renderAssistantProfile==='function')renderAssistantProfile();const old=document.getElementById('experienceResult');if(old&&experience!=null&&!appData.experienceAnalysis)old.textContent='统一资料已更新，使用此前资料生成的分析已过期，可重新分析。';}
+      if(adapter.currentIntake?.conditions?.jd&&!appData.manualJDText){appData.manualJDText=adapter.currentIntake.conditions.jd;const jd=document.getElementById('jdInput');if(jd)jd.value=appData.manualJDText;}
     }catch{/* Legacy data stays available if its page is not initialized. */}
   }
   function publish(){if(deleted)return;applyLegacy();const values=['education.stage','education.major','skills.self_report'].map(known).filter(Boolean);note(adapter.profile?'统一资料已连接'+(values.length?'：'+values.join(' · '):'，可在轻量入口整理资料。')+'。本页公共资料的主动修改会云保存；练习回答仍只保存在本页。':'当前使用本页资料。启用后可在全站复用公共资料。');window.dispatchEvent(new CustomEvent('career-profile-updated',{detail:adapter.profile}));}
   async function refresh(){if(deleted)return null;try{adapter.profile=await request('/me/profile');consented=true;let current;try{current=sessionStorage.getItem(LAST);}catch{/* Optional current-task hint. */}if(current){try{adapter.currentIntake=await request(`/intakes/${encodeURIComponent(current)}`);}catch{adapter.currentIntake=null;}}publish();return adapter.profile;}catch(error){if(error.status===401){adapter.profile=null;csrf='';consented=false;publish();return null;}note(error.message,true);return adapter.profile;}}
   function update(field_path,value,options={}){return updateMany([{field_path,value,...(options.confirm?{confirm:true}:{})}]);}
   function updateMany(patch){const work=queue.then(async()=>{if(deleted)throw new Error('云端资料已删除，请重新启用。');await ensureSession();note('正在保存统一资料…');try{adapter.profile=await request('/me/profile','PATCH',{expected_revision:adapter.profile.profile_revision,patch});publish();note('统一资料已保存到服务器，相关旧分析可重新生成。');try{localStorage.setItem('careerP0ProfileRevision',String(adapter.profile.profile_revision));}catch{/* Cross-tab hint is optional. */}return adapter.profile;}catch(error){note(error.message+' 当前输入仍在本页。',true);throw error;}});queue=work.catch(()=>{});return work;}
-  function schedule(field_path,value){changedFields.set(field_path,value?.trim()||null);clearTimeout(timer);if(!marker()&&!consented){note('本次修改目前只在本页保存。点击“启用统一资料云保存”后，可同步你刚修改的字段。');return;}timer=setTimeout(flush,650);}
-  async function flush(){if(!changedFields.size||deleted)return;const entries=[...changedFields];changedFields.clear();try{await updateMany(entries.map(([field_path,value])=>({field_path,value})));}catch{for(const [path,value]of entries)if(!changedFields.has(path))changedFields.set(path,value);}}
-  function installBanner(){if(document.getElementById('careerSharedProfile'))return;const banner=document.createElement('section');banner.id='careerSharedProfile';banner.setAttribute('aria-label','全站统一资料');banner.style.cssText='max-width:1080px;margin:16px auto;padding:13px 18px;border:1px solid #c7d2fe;border-radius:12px;background:#eef2ff;font:13px/1.6 -apple-system,"PingFang SC",sans-serif;overflow-wrap:anywhere;box-sizing:border-box';const status=document.createElement('span');status.id='careerProfileStatus';status.setAttribute('role','status');status.textContent='统一资料可在轻量入口整理，已有本地资料不会自动上传。';banner.append(status);const actions=document.createElement('div');actions.style.cssText='display:flex;flex-wrap:wrap;gap:14px;margin-top:8px';const link=document.createElement('a');link.href='/start';link.textContent='查看 / 编辑统一资料';link.style.color='#4338ca';actions.append(link);const button=document.createElement('button');button.type='button';button.textContent='启用统一资料云保存';button.style.cssText='background:none;border:0;color:#4338ca;cursor:pointer;font:inherit;padding:0;text-decoration:underline';button.onclick=async()=>{button.disabled=true;try{await ensureSession();if(changedFields.size)await flush();else{publish();note('已启用。接下来主动修改的公共资料会云保存；旧资料请在轻量入口预览后导入。');}}catch(error){note(error.message,true);}finally{button.disabled=false;}};actions.append(button);banner.append(actions);const main=document.querySelector('main');if(main)main.prepend(banner);else document.body.prepend(banner);}
+  function restorePending() {
+    try {
+      const entries = JSON.parse(sessionStorage.getItem(PENDING) || '[]');
+      for (const [path,value] of entries) {
+        if (['education.major','education.degree','experience.text'].includes(path) &&
+            (value === null || typeof value === 'string')) changedFields.set(path,value);
+      }
+    } catch {}
+  }
+  function persistPending() {
+    if (!marker() && !consented) return;
+    try {
+      if (changedFields.size) sessionStorage.setItem(PENDING, JSON.stringify([...changedFields]));
+      else sessionStorage.removeItem(PENDING);
+    } catch {}
+  }
+  function schedule(field_path,value) {
+    changedFields.set(field_path,value?.trim()||null);
+    clearTimeout(timer);
+    if (!marker() && !consented) {
+      note('本次修改目前只在本页保存。点击“启用统一资料云保存”后，可同步你刚修改的字段。');
+      return;
+    }
+    persistPending();
+    timer=setTimeout(flush,650);
+  }
+  async function flush() {
+    if (!changedFields.size || deleted || flushing) return;
+    persistPending();
+    const entries=[...changedFields];
+    flushing=true;
+    try {
+      await updateMany(entries.map(([field_path,value])=>({field_path,value})));
+      for (const [path,value] of entries) {
+        if (changedFields.get(path)===value) changedFields.delete(path);
+      }
+      persistPending();
+      publish();
+      if (changedFields.size) timer=setTimeout(flush,650);
+    } catch {
+      // Keep locally edited values available for a subsequent retry.
+    } finally {
+      flushing=false;
+    }
+  }
+  function installBanner(){if(document.getElementById('careerSharedProfile'))return;const banner=document.createElement('section');banner.id='careerSharedProfile';banner.setAttribute('aria-label','全站统一资料');banner.style.cssText='max-width:1080px;margin:16px auto;padding:13px 18px;border:1px solid #c7d2fe;border-radius:12px;background:#eef2ff;font:13px/1.6 -apple-system,"PingFang SC",sans-serif;overflow-wrap:anywhere;box-sizing:border-box';const status=document.createElement('span');status.id='careerProfileStatus';status.setAttribute('role','status');status.textContent='统一资料可在轻量入口整理，已有本地资料不会自动上传。';banner.append(status);const actions=document.createElement('div');actions.style.cssText='display:flex;flex-wrap:wrap;gap:14px;margin-top:8px';const link=document.createElement('a');link.href='/start#profileCard';link.textContent='查看 / 编辑统一资料';link.style.color='#4338ca';actions.append(link);const button=document.createElement('button');button.type='button';button.textContent='启用统一资料云保存';button.style.cssText='background:none;border:0;color:#4338ca;cursor:pointer;font:inherit;padding:0;text-decoration:underline';button.onclick=async()=>{button.disabled=true;try{await ensureSession();if(changedFields.size)await flush();else{publish();note('已启用。接下来主动修改的公共资料会云保存；旧资料请在轻量入口预览后导入。');}}catch(error){note(error.message,true);}finally{button.disabled=false;}};actions.append(button);banner.append(actions);const host=document.getElementById('careerProfileHost');const main=document.querySelector('main');if(host)host.append(banner);else if(main)main.prepend(banner);else document.body.prepend(banner);}
   function bind(){
     installBanner();
+    restorePending();
     for(const [id,path]of [['majorInput','education.major'],['experienceInput','experience.text'],['resume','experience.text']]){const node=document.getElementById(id);if(node)node.addEventListener('input',()=>{if(typeof historyViewMode!=='undefined'&&historyViewMode)return;schedule(path,node.value);});}
     document.querySelectorAll('[data-profile-field="education"]').forEach(button=>button.addEventListener('click',()=>{if(typeof historyViewMode!=='undefined'&&historyViewMode)return;schedule('education.degree',button.dataset.profileValue==='graduate'?'研究生':'本科');}));
-    window.addEventListener('storage',event=>{if(event.key==='careerP0ProfileRevision')refresh();if(event.key===NOTICE&&event.newValue===null){deleted=true;adapter.profile=null;adapter.currentIntake=null;csrf='';clearTimeout(timer);changedFields.clear();note('本人云端资料已删除，当前页面不会继续上传。');window.dispatchEvent(new CustomEvent('career-profile-updated',{detail:null}));}});
+    window.addEventListener('storage',event=>{if(event.key==='careerP0ProfileRevision')refresh();if(event.key===NOTICE&&event.newValue===null){deleted=true;adapter.profile=null;adapter.currentIntake=null;csrf='';clearTimeout(timer);changedFields.clear();try{sessionStorage.removeItem(PENDING);}catch{}note('本人云端资料已删除，当前页面不会继续上传。');window.dispatchEvent(new CustomEvent('career-profile-updated',{detail:null}));}});
     window.addEventListener('focus',()=>{if(adapter.profile&&!changedFields.size)refresh();});
-    adapter.ready=refresh();
+    window.addEventListener('pageshow',event=>{
+      if(!event.persisted||flushing||(!consented&&!marker()))return;
+      clearTimeout(timer);
+      changedFields.clear();
+      restorePending();
+      refresh().then(profile=>{if(changedFields.size&&(profile||marker()))timer=setTimeout(flush,650);});
+    });
+    adapter.ready=refresh().then(profile=>{
+      if(changedFields.size&&(profile||marker()))timer=setTimeout(flush,650);
+      return profile;
+    });
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind,{once:true});else bind();
 })();

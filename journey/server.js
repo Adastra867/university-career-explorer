@@ -4,6 +4,7 @@ import { validateGraph, validateProposal, pathsTo } from './graph.js';
 import { createResearchService, isHardFactQuestion, sanitizeAuthorizedProfile } from './research.js';
 import { createAIProvider, partialAnswer } from './ai-provider.js';
 import { installV11Routes } from './ai-v11-server.js';
+import { installCareerIntelligenceRoute } from './career-intelligence-server.js';
 
 const SCOPES = new Set(['node', 'path', 'selection', 'tree']);
 const GENERAL_CAVEAT = '基于当前规划的建议，尚未接入实时资料核验；招生、资格、薪资和截止日期请查询正式来源。';
@@ -377,7 +378,9 @@ export function createJourneyRouter(options = {}) {
     } catch (error) { next(error); }
   });
 
-  installV11Routes(router, { options, env, now, aiProvider, research, buildContext, acquireSlot, releaseSlot: () => { concurrent -= 1; }, signatureSecret, graphFingerprint, digest });
+  const aiDependencies = { options, env, now, aiProvider, research, buildContext, acquireSlot, releaseSlot: () => { concurrent -= 1; }, signatureSecret, graphFingerprint, digest };
+  installV11Routes(router, aiDependencies);
+  installCareerIntelligenceRoute(router, aiDependencies);
 
   router.use((error, req, res, next) => {
     // A disconnected browser has nobody to respond to. Passing this error on

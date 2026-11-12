@@ -55,11 +55,11 @@ export function createAIProvider(options = {}) {
   function mark(error) {
     const c = config(); connection = { fingerprint: fingerprint(c), state: error ? 'error' : 'connected', lastErrorCode: error?.code || null, lastCheckedAt: new Date(now()).toISOString() };
   }
-  async function request(messages, { signal, stream = false, test = false } = {}) {
+  async function request(messages, { signal, stream = false, test = false, maxOutputTokens } = {}) {
     const c = config();
     if (!c.enabled) throw fail('AI_DISABLED', '管理员已停用 AI，你仍然可以手动编辑人生树。');
     if (!c.configured) throw fail('AI_NOT_CONFIGURED', 'AI 未配置，你仍然可以手动编辑人生树。');
-    const maxTokens = test ? 16 : c.maxTokens;
+    const maxTokens = test ? 16 : number(maxOutputTokens, c.maxTokens, 16, 8000);
     const body = { model: c.model, stream, ...(c.deepseek ? { max_tokens: maxTokens, thinking: { type: 'disabled' } } : { max_completion_tokens: maxTokens }),
       ...(test ? {} : { response_format: { type: 'json_object' } }), messages };
     const retries = test ? 0 : number(options.maxRetries, 1, 0, 2);
@@ -87,7 +87,7 @@ export function createAIProvider(options = {}) {
       return choice.message.content;
     } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
   }
-  async function json(messages, { signal, test = false } = {}) { return readJson(await request(messages, { signal, test })); }
+  async function json(messages, { signal, test = false, maxOutputTokens } = {}) { return readJson(await request(messages, { signal, test, maxOutputTokens })); }
   async function stream(messages, { signal, onContent } = {}) {
     const response = await request(messages, { signal, stream: true });
     if ((response.headers.get('content-type') || '').includes('application/json')) { const content = await readJson(response); onContent?.(content); return content; }

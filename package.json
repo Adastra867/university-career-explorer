@@ -8,6 +8,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
+    "build:styles": "npm exec --yes --package=tailwindcss@3.4.17 -- tailwindcss -c tailwind.config.cjs -i styles/tailwind.input.css -o styles/tailwind.css --minify",
     "check": "node scripts/check-syntax.mjs",
     "test": "node --test --test-concurrency=1 tests/*.test.js",
     "test:p0": "node --test tests/p0-*.test.js",

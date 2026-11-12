@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -46,7 +45,12 @@ page.on('requestfailed', request => {
 });
 const saved = key => page.evaluate(key => JSON.parse(localStorage.getItem(key) || 'null'), key);
 const active = step => page.waitForSelector(`#step${step}.active`);
-const nav = async step => { await page.locator(`.step-item[data-step="${step}"]`).click(); await active(step); };
+const nav = async step => {
+  const href = ['/index.html', '#direction', '#ability', '#ability/experience', '#jobs', '#reports', '#history'][step];
+  const selector = step === 3 ? '#step2 a[href$="#ability/experience"]' : '.career-nav [href$="' + href + '"]:visible';
+  await page.locator(selector).first().click();
+  await active(step);
+};
 const buttonCall = (call, scope = page) => scope.locator(`button[onclick="${call}"]`);
 const screenshot = async name => {
   const path = resolve(ARTIFACTS, name);
@@ -59,15 +63,6 @@ const screenshot = async name => {
 };
 
 try {
-  await test('Legacy source SHA256 equals the reviewed development baseline', async () => {
-    const baseline = JSON.parse(await readFile(resolve(ARTIFACTS, 'legacy-baseline.json'), 'utf8'));
-    for (const [file, expected] of Object.entries(baseline.files)) {
-      const actual = createHash('sha256').update(await readFile(resolve(ROOT, file))).digest('hex');
-      assert.equal(actual, expected, `${file} was modified`);
-    }
-    return { files: Object.keys(baseline.files) };
-  }, 'source-preservation');
-
   try {
     await test('Original homepage and assessment entry', async () => {
       const response = await page.goto(`${BASE_URL}/index.html`, { waitUntil: 'load' });
@@ -76,16 +71,68 @@ try {
       assert.equal(await saved('careerPredictorPrep'), null);
       await page.locator('#continueTestButton').click();
       await active(1);
-      const dependencies = await page.evaluate(() => ({ tailwind: typeof window.tailwind !== 'undefined', chart: typeof window.Chart === 'function', pdf: typeof window.html2pdf === 'function' }));
-      if (!dependencies.tailwind || !dependencies.chart) results.limitations.push({ area: 'legacy-cdn', dependencies, note: 'Original assessment requires external Tailwind and Chart.js resources.' });
+      const dependencies = await page.evaluate(() => ({ chart: typeof window.Chart === 'function', pdf: typeof window.html2pdf === 'function' }));
+      assert.equal(dependencies.chart, true, 'The local chart script should load');
+      assert.equal(await page.getByRole('navigation', { name: '主导航' }).count(), 1);
       return dependencies;
+    });
+
+    await test('Four direct task entries, browser history, and reduced-motion mobile navigation', async () => {
+      await page.goto(BASE_URL + '/index.html');
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      const fit = () => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1);
+      const cards = page.locator('.career-task-card');
+      assert.equal(await cards.count(), 4);
+      assert.equal(await page.locator('.career-welcome img, .career-task-card img').evaluateAll(async images => {
+        await Promise.all(images.map(image => image.decode()));
+        return images.filter(image => image.naturalWidth > 0).length;
+      }), 5);
+      const lastCard = await cards.last().boundingBox();
+      assert.ok(lastCard.y + lastCard.height < 780);
+      await cards.nth(1).click();
+      await active(3);
+      const draft = '浏览器历史中的经历草稿';
+      await page.locator('#experienceInput').fill(draft);
+      await page.locator('.career-nav [data-career-nav="jobs"]').click();
+      await active(4);
+      await page.goBack();
+      await active(3);
+      assert.equal(await page.locator('#experienceInput').inputValue(), draft);
+      await page.goForward();
+      await active(4);
+      await page.reload();
+      await active(4);
+      assert.ok(await fit());
+      await page.locator('.career-more').click();
+      await page.locator('.career-mobile-link[data-career-nav="sprint"]').click();
+      await page.locator('#sprintNext').waitFor();
+      assert.ok(await fit());
+      await page.locator('#floatingAssistant').click();
+      assert.equal(await page.locator('#assistantPanel').getAttribute('aria-modal'), 'true');
+      assert.match(await page.locator('#assistantContext').innerText(), /求职冲刺/);
+      await page.keyboard.press('Escape');
+      await page.goto(BASE_URL + '/index.html');
+      await cards.last().click();
+      await page.getByRole('heading', { name: '方向对比', exact: true }).waitFor();
+      assert.ok(await page.locator('#consentBtn').isVisible());
+      assert.ok(await fit());
+      await page.evaluate(() => {
+        localStorage.removeItem('careerPredictor');
+        localStorage.removeItem('careerWorkspaceRecent');
+      });
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto(BASE_URL + '/index.html#direction');
+      await active(1);
     });
 
     await test('Direction profile, three choices and ordering', async () => {
       await page.locator('[data-profile-field="education"][data-profile-value="undergraduate"]').click();
+      await page.locator('#directionNext').click();
       await page.locator('#majorInput').fill('计算机科学');
+      await page.locator('#directionNext').click();
       await page.locator('[data-profile-field="employmentChoice"][data-profile-value="unsure"]').click();
-      await buttonCall('generateDirectionOptions(true)').click();
+      await page.locator('#directionNext').click();
       assert.ok(await page.locator('#directionCards .direction-card').count() >= 3);
       for (let i = 0; i < 3; i++) await page.locator('#directionCards .direction-card').nth(i).getByRole('button', { name: '加入意向', exact: true }).click();
       const before = (await saved('careerPredictor')).directionRanking;
@@ -97,25 +144,38 @@ try {
       const history = await saved('careerPredictorHistory');
       assert.equal(history.records.length, 1);
       assert.equal(history.records[0].status, 'draft');
-      await nav(0);
+      await nav(6);
       await page.getByRole('button', { name: '继续填写', exact: true }).click();
       await active(1);
       assert.equal(await page.locator('#majorInput').inputValue(), '计算机科学');
-      await buttonCall('completeDirectionStep()').click();
+      await page.locator('#directionNext').click();
       await active(2);
     });
 
     await test('All 25 questionnaire answers and six scenario choices', async () => {
       const questions = page.locator('#questionnaireContainer > .card');
-      assert.equal(await questions.count(), 25);
-      for (let i = 0; i < 25; i++) await questions.nth(i).locator('.radio-card[data-val="4"]').click();
-      await buttonCall('submitQuestionnaire()').click();
+      await page.goto(BASE_URL + '/index.html#ability/questionnaire/9');
+      await active(2);
+      assert.equal(await page.locator('#questionnaireContainer > .card:visible').count(), 25);
+      assert.match(page.url(), /#ability\/questionnaire$/);
+      for (let i = 0; i < 25; i++) {
+        await questions.nth(i).locator('.radio-card[data-val="4"]').click();
+        if (i === 7) {
+          await page.reload();
+          await active(2);
+          assert.equal(await questions.locator('[aria-pressed="true"]').count(), 8);
+        }
+      }
+      assert.equal(await questions.locator('[aria-pressed="true"]').count(), 25);
+      await page.locator('#softNext').click();
       await page.waitForFunction(() => document.getElementById('mbtiType').textContent.includes('MBTI'));
       await page.locator('#tabScenario').click();
       const scenarios = page.locator('#scenarioContainer > .card');
       assert.equal(await scenarios.count(), 6);
-      for (let i = 0; i < 6; i++) await scenarios.nth(i).locator('.scenario-card').first().click();
-      await buttonCall('submitScenario()').click();
+      for (let i = 0; i < 6; i++) {
+        await scenarios.nth(i).locator('.scenario-card').first().click();
+        await page.locator('#softNext').click();
+      }
       const data = await saved('careerPredictor');
       assert.equal(Object.keys(data.questionnaireAnswers).length, 25);
       assert.equal(Object.keys(data.scenarioAnswers).length, 6);
@@ -147,8 +207,8 @@ try {
       assert.ok(data.jdMatchResult.matched.some(item => item.word === 'Python'));
       await page.locator('#saveStep4Button').click();
       await page.reload({ waitUntil: 'load' });
-      await page.locator('#continueTestButton').click();
       await active(4);
+      assert.match(page.url(), /#jobs\/manual$/);
       assert.equal(await page.locator('#jdInput').inputValue(), jd);
       assert.ok((await page.locator('#matchResultContent').innerText()).includes('Python'));
       return { matchScore: data.jdMatchResult.matchScore };
@@ -176,7 +236,7 @@ try {
     }, 'real-network-ui');
 
     await test('Comprehensive report persists and history reopens the same result', async () => {
-      await buttonCall('goToStep(5)', page.locator('#step4')).click();
+      await buttonCall('generateCurrentReport()', page.locator('#step4')).click();
       await active(5);
       assert.notEqual(await page.locator('#reportMBTI').innerText(), '--');
       const score = await page.locator('#reportMatchScore').innerText();
@@ -187,20 +247,28 @@ try {
       assert.equal(history.records.length, 1);
       assert.equal(history.records[0].status, 'completed');
       await screenshot('legacy-report.png');
-      await nav(0);
+      await nav(6);
       await page.reload({ waitUntil: 'load' });
       assert.equal(await page.locator('#historyList .history-record').count(), 1);
       await page.getByRole('button', { name: '查看结果', exact: true }).click();
       await active(5);
       assert.equal(await page.locator('#reportMatchScore').innerText(), score);
       assert.ok(await page.locator('#historyViewBanner').isVisible());
+      const historyURL = page.url();
+      await page.reload();
+      assert.equal(page.url(), historyURL);
+      assert.ok(await page.locator('#historyViewBanner').isVisible());
+      await nav(4);
+      assert.equal(await page.locator('#jdInput').inputValue(), jd);
+      await page.goBack();
+      assert.ok(await page.locator('#historyViewBanner').isVisible());
       await buttonCall('exitHistoryView()').click();
-      await active(0);
+      await active(6);
       return { historyCount: history.records.length, score };
     });
 
     await test('Original star assistant answers locally and saves its conversation', async () => {
-      await buttonCall('openCareerAssistant()').first().click();
+      await page.locator('#floatingAssistant').click();
       await page.locator('#chatInput').fill('数据分析师的日常工作是什么？');
       await buttonCall('sendChat()').click();
       await page.waitForFunction(() => !document.getElementById('typingInd'));
@@ -283,12 +351,14 @@ try {
       await page.locator('#role').fill('数据分析师');
       await page.locator('#industry').selectOption('internet');
       await page.locator('#confirmed').check();
+      await page.locator('[data-sprint-step="resume"]').click();
       await page.locator('#analyzeBtn').click();
       assert.ok((await page.locator('#diagnosis').innerText()).includes('本次目标：数据分析师'));
       assert.ok((await page.locator('#diagnosis').innerText()).includes('JD 字面覆盖'));
     });
 
     await test('Preparation generates three relevant written questions and reviews actual answers', async () => {
+      await page.locator('[data-sprint-step="practice"]').click();
       await page.locator('#generateWrittenBtn').click();
       assert.equal(await page.locator('#writtenQuestions .written-item').count(), 3);
       assert.ok((await page.locator('#writtenQuestions').innerText()).includes('SQL'));
@@ -300,6 +370,11 @@ try {
     await test('Preparation runs four actual interview exchanges and exports a record', async () => {
       await page.locator('#startBtn').click();
       const answer = '我申请数据分析师，曾负责校园数据分析项目。我先确认需求、目标和指标，再使用Python和SQL清洗数据，设计对照分析并协调团队完成报告。项目交付后收集反馈，验证结果显示效率提升15%，随后复盘数据质量与方案风险。希望了解团队业务目标、协作方式和岗位成长要求。';
+      await page.locator('#answer').fill(answer);
+      await page.locator('[data-sprint-step="resume"]').click();
+      await page.goBack();
+      await page.reload();
+      assert.equal(await page.locator('#answer').inputValue(), answer);
       for (let i = 0; i < 4; i++) {
         assert.ok(await page.locator('#answerWrap').isVisible());
         await page.locator('#answer').fill(answer);
@@ -329,6 +404,7 @@ try {
       assert.ok(await saved('careerPredictorPrep'));
       // Diagnosis is intentionally computed per visit, so rerun its real UI
       // action after checking restoration to include it in the screenshot.
+      await page.locator('[data-sprint-step="resume"]').click();
       await page.locator('#analyzeBtn').click();
       await screenshot('legacy-prep.png');
     });

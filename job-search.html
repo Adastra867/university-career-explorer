@@ -7,14 +7,9 @@
   <meta name="description" content="从全网搜索岗位JD，智能匹配你的软硬实力，找到最适合你的工作机会">
   <script type="module" src="/scripts/job-scoring.js"></script>
   <script defer src="/p0/profile-adapter.js"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.cn">
   <link rel="preconnect" href="https://fonts.gstatic.cn" crossorigin>
   <link href="https://fonts.googleapis.cn/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <script>
-    tailwind.config={theme:{extend:{fontFamily:{sans:['Inter','-apple-system','PingFang SC','Microsoft YaHei','sans-serif']},colors:{primary:{50:'#EEF2FF',100:'#E0E7FF',200:'#C7D2FE',300:'#A5B4FC',400:'#818CF8',500:'#6366F1',600:'#4F46E5',700:'#4338CA'},accent:{400:'#2DD4BF',500:'#14B8A6',600:'#0D9488'},warm:{50:'#FAFAF9',100:'#F5F5F4'}},animation:{'pulse-soft':'pulseSoft 2s ease-in-out infinite','shimmer':'shimmer 2s linear infinite','fade-up':'fadeUp 0.4s ease-out'},keyframes:{pulseSoft:{'0%,100%':{opacity:'1'},'50%':{opacity:'0.7'}},shimmer:{'0%':{backgroundPosition:'-200% 0'},'100%':{backgroundPosition:'200% 0'}},fadeUp:{'0%':{opacity:'0',transform:'translateY(16px)'},'100%':{opacity:'1',transform:'translateY(0)'}}}}}}
-  </script>
   <style>
     *{box-sizing:border-box}
     body{background:#FAFAF9;color:#1E293B;font-family:'Inter',-apple-system,'PingFang SC','Microsoft YaHei',sans-serif}
@@ -56,42 +51,28 @@
     .tab-btn:not(.active){background:#fff;color:#64748B;border:1px solid #E2E8F0}
     .tab-btn:not(.active):hover{border-color:#A5B4FC;color:#4F46E5}
   </style>
+  <link rel="stylesheet" href="/styles/tailwind.css">
+  <link rel="stylesheet" href="/styles/career-shell.css">
+  <script defer src="/scripts/career-shell.js"></script>
+  <script defer src="/scripts/career-assistant.js"></script>
 </head>
-<body class="min-h-screen">
+<body class="min-h-screen" data-career-page="jobs">
   <!-- Header -->
-  <header class="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100 shadow-sm">
-    <div class="max-w-6xl mx-auto px-4 py-3">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <a href="index.html" class="flex items-center gap-2 hover:opacity-80 transition">
-            <div class="w-8 h-8 gradient-bg rounded-lg flex items-center justify-center">
-              <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
-            </div>
-            <span class="font-bold text-sm gradient-text">职途星轨</span>
-          </a>
-          <span class="text-slate-300">|</span>
-          <span class="text-sm font-medium text-slate-600">岗位智能匹配</span>
-        </div>
-        <div class="flex items-center gap-3">
-          <div id="profileBadge" class="hidden items-center gap-2 bg-primary-50 rounded-full px-3 py-1">
-            <svg class="w-4 h-4 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            <span class="text-xs text-primary-600 font-medium">已导入能力档案</span>
-          </div>
-          <a href="index.html" class="btn-secondary text-sm py-1.5 px-4">返回测评</a>
-        </div>
-      </div>
-    </div>
-  </header>
+
 
   <main class="max-w-6xl mx-auto px-4 py-6">
-    <p class="text-sm mb-4"><a href="/start" class="text-primary-600 font-semibold">前往轻量入口，一句话开始探索 →</a></p>
-    <p class="text-xs text-slate-500 mb-4">材料匹配分表示与 JD 的关键词对应程度，不代表能力等级或录用概率。原文链接用于核实岗位，来源未提供的招聘日期保持未知。</p>
+    <details class="career-profile-host" id="careerProfileHost"><summary>统一资料</summary></details>
+    <div class="mb-4 flex flex-wrap items-center gap-3"><a href="/index.html#jobs" class="career-text-link">返回推荐与匹配 →</a><span id="profileBadge" class="hidden items-center gap-2 bg-primary-50 rounded-full px-3 py-1 text-xs text-primary-700">已读取能力画像</span></div>
+    <details class="text-xs text-slate-500 mb-4">
+      <summary class="cursor-pointer">如何解读匹配分</summary>
+      <p class="mt-2">匹配分衡量材料与 JD 的关键词覆盖。请打开原文核验岗位要求和发布日期。</p>
+    </details>
     <!-- Profile Import Banner -->
     <div id="importBanner" class="card-flat p-5 mb-6 border-2 border-dashed border-primary-200 bg-primary-50/30">
       <div class="flex items-center justify-between">
         <div>
           <h3 class="font-semibold text-sm text-primary-700 mb-1">复用已有资料</h3>
-          <p class="text-xs text-slate-500">优先使用统一画像；也可在本机读取旧经历原文。保存到云端需在轻量入口预览并主动导入。</p>
+          <p class="text-xs text-slate-500">可读取统一资料或本机经历。</p>
         </div>
         <button onclick="importProfile()" class="btn-primary text-sm py-2 px-4 flex-shrink-0">读取资料</button>
       </div>
@@ -176,9 +157,9 @@
       </div>
 
     <!-- Empty State -->
-    <div id="emptyState" class="text-center py-16">
-      <svg class="w-20 h-20 mx-auto text-slate-200 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-      <p class="text-slate-400 text-sm">输入关键词搜索岗位，或先复用已有资料</p>
+    <div id="emptyState" class="career-illustrated-empty py-5">
+      <img src="/assets/career/career-jobs.webp" alt="" width="360" height="360" loading="lazy">
+      <p>搜索后在这里查看岗位。</p>
     </div>
   </main>
 
@@ -242,7 +223,9 @@
 
   /* === SEARCH JOBS === */
   function quickSearch(keyword) {
-    document.getElementById('searchQuery').value = keyword;
+    const input = document.getElementById('searchQuery');
+    input.value = keyword;
+    input.dispatchEvent(new Event('input'));
     searchJobs();
   }
 
@@ -304,6 +287,7 @@
 
   /* === RENDER RESULTS === */
   function renderResults(jobs, query) {
+    document.dispatchEvent(new Event('career-job-results'));
     document.getElementById('resultsSection').classList.remove('hidden');
     document.getElementById('emptyState').classList.add('hidden');
     document.getElementById('resultsSummary').textContent = '找到 ' + jobs.length + ' 个相关岗位';
@@ -425,6 +409,7 @@
     html += '<p class="text-xs text-slate-500 mt-4">' + esc(result.explanation) + '</p><p class="text-sm mt-3">下一步：对照完整 JD，为一个关键要求补充真实行动或交付物；未知项可以保留。</p></div>';
     document.getElementById('manualResult').innerHTML = html;
     document.getElementById('manualResult').classList.remove('hidden');
+    document.dispatchEvent(new Event('career-job-results'));
   }
 
   function esc(s) {
@@ -436,6 +421,23 @@
 
   /* === INIT === */
   document.addEventListener('DOMContentLoaded', function() {
+    const searchDraftKey = 'careerWorkspaceJobSearch';
+    const inputs = ['searchQuery', 'searchLocation', 'manualJD'].map(id => document.getElementById(id));
+    let draft;
+    try { draft = JSON.parse(localStorage.getItem(searchDraftKey)); } catch {}
+    function updateSearchStatus() {
+      CareerShell.setStatus(searchResults.length || !document.getElementById('manualResult').classList.contains('hidden') ? '已完成' : inputs.some(input => input.value.trim()) ? '进行中' : '未开始');
+    }
+    inputs.forEach(input => {
+      if (typeof draft?.[input.id] === 'string') input.value = draft[input.id];
+      input.addEventListener('input', () => {
+        try { localStorage.setItem(searchDraftKey, JSON.stringify(Object.fromEntries(inputs.map(field => [field.id, field.value])))); } catch {}
+        CareerShell.remember('/job-search.html', '岗位匹配 · 关键词搜索');
+        updateSearchStatus();
+      });
+    });
+    document.addEventListener('career-job-results', updateSearchStatus);
+    updateSearchStatus();
     try {
       var saved = localStorage.getItem('careerPredictor');
       if (saved) {

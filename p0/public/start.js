@@ -24,10 +24,67 @@ async function api(path,method='GET',body) {
 }
 function setBusy(busy) { state.busy=busy;['generateBtn','saveBtn','answerBtn','skipBtn','directBtn','reanalyzeBtn','retryTurnBtn','previewBtn','importLegacyBtn','confirmVisibleBtn'].forEach(id=>$(id).disabled=busy);document.querySelectorAll('[data-task]').forEach(button=>button.disabled=busy);renderShareState(); }
 function conditions() { return {jd:$('jdInput').value.trim(),options:$('optionsInput').value.trim(),time:$('constraintsInput').value.trim()}; }
-function cacheDraft() { if(!state.intake||state.deleted)return;storage('localStorage','setItem',CACHE,JSON.stringify({guest_id:state.guest,intake_id:state.intake.id,input:$('mainInput').value,input_source_type:state.inputSource,conditions:conditions(),saved_at:Date.now()})); }
-function clearCache() { storage('localStorage','removeItem',CACHE); }
+const taskRoutes = {
+  explore_direction: ['direction', '方向建议'],
+  build_experience: ['ability', '行动建议'],
+  find_opportunity: ['jobs', '求职建议'],
+  compare_options: ['direction', '方向对比'],
+};
+function intakeURL(intake) {
+  const params = new URLSearchParams({ task: intake.task_type, draft: intake.id });
+  if (intake.campaign_slug) params.set('campaign', intake.campaign_slug);
+  return '/start?' + params;
+}
+function taskHeader() {
+  const intake = state.intake;
+  const task = intake?.task_type || state.requestedTask;
+  $('compareArtwork').hidden = task !== 'compare_options';
+  const [key, title] = taskRoutes[task] || ['profile', '统一资料与提交'];
+  const stale = intake?.result_stale || (intake?.result && isDirty());
+  const status = stale ? '需要更新' : intake?.result && !intake.question ? '已完成' : intake?.input || intake?.result || (intake && isDirty()) ? '进行中' : '未开始';
+  CareerShell.setPage(key, title, task ? status : '');
+  $('intakeProgress').textContent = $('workspace').hidden ? '第 1 步 · 了解资料如何使用' :
+    !intake ? '查看资料，或选择一项任务' :
+    intake.question ? '第 3 步 · 补充关键问题，或直接查看建议' :
+    intake.result ? (stale ? '第 3 步 · 更新建议' : '第 3 步 · 查看建议') : '第 2 步 · 输入情况并生成建议';
+  window.refreshAssistantContext?.();
+}
+function draftCacheKey(id = state.intake?.id) { return CACHE + ':' + id; }
+function answerCacheKey(id = state.intake?.id) { return 'careerP0Answer:' + id; }
+function clearDraftCaches() {
+  try {
+    if (CareerShell.recent()?.href?.startsWith('/start?')) localStorage.removeItem('careerWorkspaceRecent');
+    if (CareerShell.recentAdvice()?.href?.startsWith('/start?')) localStorage.removeItem('careerWorkspaceRecentAdvice');
+    for (const name of Object.keys(localStorage)) {
+      if (name === CACHE || name.startsWith(CACHE + ':')) localStorage.removeItem(name);
+    }
+    for (const name of Object.keys(sessionStorage)) {
+      if (name.startsWith('careerP0Answer:')) sessionStorage.removeItem(name);
+    }
+  } catch {}
+}
+function rememberTask() {
+  if (state.intake) CareerShell.remember(intakeURL(state.intake), taskRoutes[state.intake.task_type][1]);
+}
+function cacheDraft() {
+  if (!state.intake || state.deleted) return;
+  const previous = jsonStorage('localStorage', draftCacheKey());
+  storage('localStorage', 'setItem', draftCacheKey(), JSON.stringify({
+    guest_id: state.guest,
+    intake_id: state.intake.id,
+    base_revision: state.conflict && previous ? previous.base_revision : state.intake.input_revision,
+    input: $('mainInput').value,
+    input_source_type: state.inputSource,
+    conditions: conditions(),
+    saved_at: Date.now(),
+  }));
+}
+function clearCache() {
+  storage('localStorage','removeItem',draftCacheKey());
+  if (jsonStorage('localStorage',CACHE)?.intake_id === state.intake?.id) storage('localStorage','removeItem',CACHE);
+}
 function isDirty() { return state.intake&&($('mainInput').value.trim()!==state.intake.input||JSON.stringify(conditions())!==JSON.stringify({jd:state.intake.conditions?.jd||'',options:state.intake.conditions?.options||'',time:state.intake.conditions?.time||''})); }
-function changed() { if(!state.intake||state.deleted)return;cacheDraft();status('saveStatus','尚未保存到服务器；当前输入仅缓存在此设备。');clearTimeout(state.timer);state.timer=setTimeout(()=>flushDraft().catch(()=>{}),650);renderShareState(); }
+function changed() { if(!state.intake||state.deleted)return;cacheDraft();rememberTask();taskHeader();status('saveStatus','尚未保存到服务器；当前输入仅缓存在此设备。');clearTimeout(state.timer);state.timer=setTimeout(()=>flushDraft().catch(()=>{}),650);renderShareState(); }
 async function flushDraft() {
   clearTimeout(state.timer);
   if(state.saving) await state.saving;
@@ -43,21 +100,63 @@ async function flushDraft() {
   })();
   try { await state.saving; } finally { state.saving=null;renderShareState(); }
 }
-function fillEditor(intake) { state.intake=intake;state.inputSource=intake.input_source_type||'user_text';state.conflict=false;$('reloadBtn').hidden=true;$('editor').hidden=false;$('taskTitle').textContent=TASKS[intake.task_type]?.[0]||'当前任务';$('taskHelp').textContent=TASKS[intake.task_type]?.[1]||'';$('mainInput').value=intake.input||'';$('mainInput').placeholder=TASKS[intake.task_type]?.[1]||'';$('jdInput').value=intake.conditions?.jd||'';$('optionsInput').value=intake.conditions?.options||'';$('constraintsInput').value=intake.conditions?.time||'';document.querySelectorAll('[data-task]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.task===intake.task_type)));storage('sessionStorage','setItem',LAST,intake.id);status('saveStatus','已保存到服务器 · 仅供本人继续');renderResult();renderProfile(); }
-async function loadIntake(id) { if(state.busy)return;try { await flushDraft();setBusy(true);fillEditor(await api(`/intakes/${encodeURIComponent(id)}`));restoreCache(); }catch(error){status('globalStatus',error.message,true);}finally{setBusy(false);} }
-function restoreCache() { const cache=jsonStorage('localStorage',CACHE);if(cache?.guest_id===state.guest&&cache.intake_id===state.intake?.id&&Date.now()-cache.saved_at<7*86400000){$('mainInput').value=cache.input||'';state.inputSource=cache.input_source_type||'user_text';for(const [id,path] of [['jdInput','jd'],['optionsInput','options'],['constraintsInput','time']])$(id).value=cache.conditions?.[path]||'';if(isDirty()){status('saveStatus','已恢复此设备中尚未上传的文字，点击“保存我的进度”重试。',true);renderShareState();}} }
-async function createTask(taskType) { if(state.busy)return;if(state.intake?.task_type===taskType&&state.intake.campaign_slug===(state.campaignSlug||null)){$('mainInput').focus();return;}try { await flushDraft();setBusy(true);status('globalStatus','');const intake=await api('/intakes','POST',{task_type:taskType,...(state.campaignSlug?{campaign_slug:state.campaignSlug}:{})});fillEditor(intake);await refreshLists();$('mainInput').focus(); }catch(error){status('globalStatus',error.message,true);}finally{setBusy(false);} }
+function fillEditor(intake, navigation = 'replaceState') {
+  state.intake=intake;
+  const url = intakeURL(intake) + location.hash;
+  if (state.campaignSlug !== (intake.campaign_slug || null)) {
+    state.campaignSlug = intake.campaign_slug || null;
+    state.campaign = null;
+    loadCampaign().then(renderShareState);
+  }
+  if (navigation && url !== location.pathname + location.search + location.hash) history[navigation](null, '', url);
+  $('questionAnswer').value = storage('sessionStorage','getItem',answerCacheKey()) || '';
+  $('intakeTaskPicker').open = false;
+  state.inputSource=intake.input_source_type||'user_text';state.conflict=false;$('reloadBtn').hidden=true;$('editor').hidden=false;$('taskTitle').textContent=TASKS[intake.task_type]?.[0]||'当前任务';$('taskHelp').textContent=TASKS[intake.task_type]?.[1]||'';$('mainInput').value=intake.input||'';$('mainInput').placeholder=TASKS[intake.task_type]?.[1]||'';$('jdInput').value=intake.conditions?.jd||'';$('optionsInput').value=intake.conditions?.options||'';$('constraintsInput').value=intake.conditions?.time||'';document.querySelectorAll('[data-task]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.task===intake.task_type)));storage('sessionStorage','setItem',LAST,intake.id);status('saveStatus','已保存到服务器 · 仅供本人继续');renderResult();renderProfile(); }
+async function loadIntake(id, navigation = 'pushState') {
+  if (state.busy) return;
+  setBusy(true);
+  try {
+    await flushDraft().catch(cacheDraft);
+    fillEditor(await api('/intakes/' + encodeURIComponent(id)), navigation);
+    restoreCache();
+  } catch (error) {
+    status('globalStatus',error.message,true);
+  } finally {
+    setBusy(false);
+  }
+}
+function restoreCache() {
+  const cache = jsonStorage('localStorage', draftCacheKey()) || jsonStorage('localStorage', CACHE);
+  if (cache?.guest_id !== state.guest || cache.intake_id !== state.intake?.id || Date.now() - cache.saved_at >= 7 * 86400000) return;
+  $('mainInput').value = cache.input || '';
+  state.inputSource = cache.input_source_type || 'user_text';
+  for (const [id,path] of [['jdInput','jd'],['optionsInput','options'],['constraintsInput','time']]) {
+    $(id).value = cache.conditions?.[path] || '';
+  }
+  if (!isDirty()) {
+    clearCache();
+    return;
+  }
+  state.conflict = Number.isInteger(cache.base_revision) && cache.base_revision !== state.intake.input_revision;
+  $('reloadBtn').hidden = !state.conflict;
+  status('saveStatus', state.conflict ? '云端草稿已有新版本。当前设备上的文字已恢复，请合并后再保存。' :
+    '已恢复此设备中尚未上传的文字，点击“保存草稿”重试。', true);
+  taskHeader();
+  renderShareState();
+}
+async function createTask(taskType, navigation = 'pushState') { if(state.busy)return;if(state.intake?.task_type===taskType&&state.intake.campaign_slug===(state.campaignSlug||null)){$('mainInput').focus();return;}try { await flushDraft();setBusy(true);status('globalStatus','');const intake=await api('/intakes','POST',{task_type:taskType,...(state.campaignSlug?{campaign_slug:state.campaignSlug}:{})});fillEditor(intake, navigation);rememberTask();await refreshLists();$('mainInput').focus(); }catch(error){status('globalStatus',error.message,true);}finally{setBusy(false);} }
 async function refreshProfile() { state.profile=await api('/me/profile');storage('localStorage','setItem','careerP0ProfileRevision',String(state.profile.profile_revision));renderProfile();window.dispatchEvent(new CustomEvent('career-profile-updated',{detail:state.profile})); }
 function pendingTurn(){const saved=state.turn||jsonStorage('sessionStorage','careerP0Turn');if(saved?.intake_id===state.intake?.id)return saved;const pending=state.intake?.pending_turn;if(pending?.idempotency_key&&pending.body)return{...pending,intake_id:state.intake.id};return null;}
 function renderResult() {
-  const intake=state.intake;if(!intake)return;$('pendingCard').hidden=!pendingTurn();$('resultCard').hidden=!intake.result;$('profileCard').hidden=false;if(!intake.result){renderShareState();return;}
+  taskHeader();
+  const intake=state.intake;if(!intake)return;$('intakeActions').classList.toggle('career-fixed-actions',!intake.result);$('pendingCard').hidden=!pendingTurn();$('resultCard').hidden=!intake.result;$('profileCard').hidden=false;if(!intake.result){renderShareState();return;}
   $('modeLabel').textContent=intake.mode==='online_ai'?'AI 建议 · 在线生成':'规则建议 · 未调用在线 AI';
   $('staleWarning').hidden=!intake.result_stale;$('modelWarning').hidden=!intake.error;if(intake.error)$('modelWarning').textContent=(intake.error.message||intake.error.code||'在线分析暂不可用')+' 以下为规则建议，可稍后主动重新分析。';
   const box=$('resultContent');box.replaceChildren();text(box,'p',intake.result.summary||'以下建议基于当前提供的信息。');
   (intake.result.options||[]).forEach(option=>{const item=text(box,'article','','option');text(item,'h3',option.title||'可以尝试的方向');if(option.reason)text(item,'p',option.reason);if(option.unknowns?.length)text(item,'p','尚待了解：'+option.unknowns.join('；'),'muted');if(option.next_action)text(item,'p','下一步：'+option.next_action,'next');});
   if(intake.result.unknowns?.length)text(box,'p','仍未知：'+intake.result.unknowns.join('；'),'muted small');
   for(const conflict of intake.conflicts||[]){text(box,'p',`${LABELS[conflict.field_path]||conflict.field_path}存在差异：你已填写“${conflict.current??'未知'}”，本次材料整理为“${conflict.incoming??'未知'}”。已保留你修正的内容，可在下方资料卡中修改。`,'warning');}
-  const question=intake.question;$('questionBox').hidden=!question;if(question){$('questionBudget').textContent=`关键追问 ${intake.question_count||1} / 2`;$('questionTitle').textContent=question.question;$('questionReason').textContent=question.reason||'';$('questionOptions').replaceChildren();(question.options||[]).forEach(option=>{const button=text($('questionOptions'),'button',option,'pill');button.type='button';button.onclick=()=>{$('questionAnswer').value=option;$('questionAnswer').focus();};});}
+  const question=intake.question;$('questionBox').hidden=!question;if(question){$('questionBudget').textContent=`关键追问 ${intake.question_count||1} / 2`;$('questionTitle').textContent=question.question;$('questionReason').textContent=question.reason||'';$('questionOptions').replaceChildren();(question.options||[]).forEach(option=>{const button=text($('questionOptions'),'button',option,'pill');button.type='button';button.onclick=()=>{$('questionAnswer').value=option;$('questionAnswer').dispatchEvent(new Event('input'));$('questionAnswer').focus();};});}
   renderShareState();
 }
 function renderShareState() { const intake=state.intake;const noCampaign=!intake?.campaign_slug&&!state.campaign?.slug;const closed=state.campaign&&!state.campaign.open;$('previewBtn').disabled=state.busy||!intake?.result||!!intake?.result_stale||isDirty()||noCampaign||!!closed;$('shareHelp').textContent=noCampaign?'当前为个人使用。通过明确的活动链接进入后，可把该活动任务提交给管理员。':closed?'活动已关闭，无法新增提交；你的个人进度仍可使用。':'保存进度只供本人使用。下一步先预览接收方与共享内容，再明确提交。'; }
@@ -69,11 +168,15 @@ async function runTurn(action) {
     const signature=JSON.stringify({intake_id:state.intake.id,...request});const pending=previous||{signature,idempotency_key:key(),body:request,intake_id:state.intake.id};state.turn=pending;storage('sessionStorage','setItem','careerP0Turn',JSON.stringify(pending));
     setBusy(true);status('globalStatus','正在分析，输入和草稿会保留。');const result=await api(`/intakes/${encodeURIComponent(pending.intake_id)}/turns`,'POST',{...pending.body,idempotency_key:pending.idempotency_key});
     if(result.input_revision>=state.intake.input_revision)state.intake=result;else state.intake=await api(`/intakes/${encodeURIComponent(pending.intake_id)}`);
-    state.turn=null;storage('sessionStorage','removeItem','careerP0Turn');$('questionAnswer').value='';await refreshProfile();renderResult();await refreshLists();status('globalStatus','初步结果已生成，可直接查看；资料确认不是前置条件。');
+    state.turn=null;storage('sessionStorage','removeItem','careerP0Turn');storage('sessionStorage','removeItem',answerCacheKey());$('questionAnswer').value='';
+    rememberTask();
+    if (state.intake.result) CareerShell.rememberAdvice(intakeURL(state.intake) + '#resultCard', taskRoutes[state.intake.task_type][1]);
+    await refreshProfile();renderResult();await refreshLists();status('globalStatus','初步结果已生成，可直接查看；资料确认不是前置条件。');
   }catch(error){status('globalStatus',`${error.message} 输入仍保留。可再次点击原操作重试。`,true);if(error.status>=400&&error.status<500&&error.status!==429){state.turn=null;storage('sessionStorage','removeItem','careerP0Turn');}renderResult();}
   finally{setBusy(false);}
 }
 function renderProfile() {
+  window.CareerIntakeProfile = state.profile;
   if(!state.profile)return;const fields=state.profile.fields||{};const preferred={explore_direction:['education.stage','education.major','experience.text','skills.self_report','preferences.long_term_goal'],build_experience:['education.stage','education.major','experience.text','skills.self_report'],find_opportunity:['education.stage','education.degree','education.major','experience.text','skills.self_report'],compare_options:['education.stage','education.major','experience.text','preferences.long_term_goal','preferences.city']}[state.intake?.task_type]||['education.stage','education.major','experience.text','skills.self_report'];state.primary=preferred;$('profilePrimary').replaceChildren();$('profileOther').replaceChildren();
   for(const path of Object.keys(LABELS)){const field=fields[path]||{value:null,value_state:'unknown',confirmation_state:'unconfirmed',source_refs:[]};const container=state.primary.includes(path)?$('profilePrimary'):$('profileOther');const row=text(container,'div','','profile-row');const meta=text(row,'div','','profile-meta');text(meta,'strong',LABELS[path]);text(meta,'small',(field.value_state==='unknown'?'未知':CONFIRMATIONS[field.confirmation_state]||'待确认整理'));text(row,'p',field.value==null||field.value===''?'尚未提供':field.value,'value');text(row,'small',(SOURCES[field.source_type]||'尚无来源')+(field.source_refs?.length?' · 原文：'+field.source_refs.map(ref=>ref.quote||ref.source_id).join('；'):''));const edit=text(row,'details');text(edit,'summary','修改这一项');const label=text(edit,'label','','field');text(label,'span',LABELS[path]);const input=text(label,'textarea');input.rows=path==='experience.text'?5:2;input.maxLength=path==='experience.text'?20000:2000;input.value=field.value||'';const button=text(edit,'button','保存这一项','secondary');button.type='button';button.onclick=()=>updateFields([{field_path:path,value:input.value.trim()||null}]);}
   $('confirmVisibleBtn').disabled=state.busy||!state.primary.some(path=>fields[path]?.value!=null);
@@ -106,18 +209,45 @@ async function startSession(explicit=false) {
     state.deleted=false;state.csrf=session.csrf_token;state.guest=session.guest_id;state.profile=session.profile||await api('/me/profile');
     storage('localStorage','setItem',NOTICE,'p0-v1');$('notice').hidden=true;$('workspace').hidden=false;
     $('sessionInfo').textContent=`${session.ai_configured?'已配置在线 AI；生成建议时使用。':'当前使用规则建议，未配置在线 AI。'} 资料按项目配置保存 ${session.retention_days||'规定'} 天；可在“我的提交”中撤回或删除。`;
-    renderProfile();showLegacy();const drafts=await refreshLists();const last=storage('sessionStorage','getItem',LAST);
+    window.CareerIntakeProfile = state.profile;renderProfile();showLegacy();const drafts=await refreshLists();const last=storage('sessionStorage','getItem',LAST);
     const requested=TASKS[state.requestedTask]?state.requestedTask:null;
     const matching=item=>item.campaign_slug===(state.campaignSlug||null)&&(!requested||item.task_type===requested);
-    const chosen=drafts.find(item=>item.id===last&&matching(item))||drafts.find(matching);
+    const wanted = new URLSearchParams(location.search).get('draft');
+    const chosen=drafts.find(item=>item.id===wanted&&matching(item))||drafts.find(item=>item.id===last&&matching(item))||drafts.find(matching);
     if(chosen){fillEditor(await api(`/intakes/${encodeURIComponent(chosen.id)}`));restoreCache();}
-    else if(requested)await createTask(requested);
+    else if(requested)await createTask(requested, 'replaceState');
+    else { $('intakeTaskPicker').open = true; $('profileCard').hidden = false; }
+    taskHeader();
+    if (['#resultCard','#cloudHistory','#profileCard'].includes(location.hash)) document.getElementById(location.hash.slice(1)).scrollIntoView();
     if(explicit)status('globalStatus',chosen||requested?'已进入当前任务，已有资料会自动复用。':'已建立个人进度，请选择当前任务。');
   }catch(error){$('notice').hidden=false;status('noticeStatus',error.message,true);}
   finally{$('consentBtn').disabled=false;}
 }
-async function loadCampaign(){if(!state.campaignSlug)return;try{state.campaign=await api(`/campaigns/${encodeURIComponent(state.campaignSlug)}/public`);const box=$('campaignBanner');box.replaceChildren();text(box,'strong',state.campaign.name);text(box,'p',state.campaign.description||'本次活动');text(box,'p','接收方：'+(state.campaign.organizer||'活动管理员'));text(box,'p','共享范围：'+state.campaign.scope);if(!state.campaign.open)text(box,'p','活动已关闭：可以继续个人体验，无法新增提交。','error');}catch(error){status('campaignBanner','活动无法读取：'+error.message,true);}}
-async function deleteData(){if(!confirm('确认删除本人全部云端资料、任务和提交正文？会话将失效，无法恢复。'))return;try{state.deleted=false;await api('/me/data','DELETE');state.deleted=true;clearTimeout(state.timer);for(const item of [NOTICE,CACHE,'careerP0Profile'])storage('localStorage','removeItem',item);for(const item of [LAST,'careerP0Turn','careerP0Submit'])storage('sessionStorage','removeItem',item);state.csrf='';state.intake=null;state.profile=null;$('workspace').hidden=true;$('notice').hidden=false;status('noticeStatus','本人云端资料已删除，会话已失效。旧本地测评资料未自动上传。');window.dispatchEvent(new CustomEvent('career-profile-updated',{detail:null}));}catch(error){status('globalStatus',error.message,true);}}
+async function loadCampaign() {
+  const slug = state.campaignSlug;
+  const banner = $('campaignBanner');
+  if (!slug) {
+    banner.classList.remove('error');
+    banner.replaceChildren();
+    text(banner, 'p', '普通访问：进度仅供本人继续使用。通过活动链接进入后，可预览并提交给指定管理员。');
+    return;
+  }
+  try {
+    const campaign = await api('/campaigns/' + encodeURIComponent(slug) + '/public');
+    if (state.campaignSlug !== slug) return;
+    state.campaign = campaign;
+    banner.classList.remove('error');
+    banner.replaceChildren();
+    text(banner, 'strong', campaign.name);
+    text(banner, 'p', campaign.description || '本次活动');
+    text(banner, 'p', '接收方：' + (campaign.organizer || '活动管理员'));
+    text(banner, 'p', '共享范围：' + campaign.scope);
+    if (!campaign.open) text(banner, 'p', '活动已关闭：可以继续个人体验，无法新增提交。', 'error');
+  } catch (error) {
+    if (state.campaignSlug === slug) status('campaignBanner', '活动无法读取：' + error.message, true);
+  }
+}
+async function deleteData(){if(!confirm('确认删除本人全部云端资料、任务和提交正文？会话将失效，无法恢复。'))return;try{state.deleted=false;await api('/me/data','DELETE');state.deleted=true;clearTimeout(state.timer);clearDraftCaches();for(const item of [NOTICE,'careerP0Profile','careerWorkspaceRecentAdvice'])storage('localStorage','removeItem',item);for(const item of [LAST,'careerP0Turn','careerP0Submit','careerP0PendingProfileFields'])storage('sessionStorage','removeItem',item);state.csrf='';state.intake=null;state.profile=null;window.CareerIntakeProfile=null;$('workspace').hidden=true;$('notice').hidden=false;$('editor').hidden=true;taskHeader();status('noticeStatus','本人云端资料已删除，会话已失效。旧本地测评资料未自动上传。');window.dispatchEvent(new CustomEvent('career-profile-updated',{detail:null}));}catch(error){status('globalStatus',error.message,true);}}
 async function syncCloud(){
   if(!state.profile||state.deleted||state.busy)return;
   try{
@@ -139,5 +269,14 @@ document.querySelector('.file-label').onkeydown=event=>{if(event.key==='Enter'||
 window.addEventListener('online',()=>{if(state.intake&&isDirty()&&!state.conflict)flushDraft().catch(()=>{});});
 window.addEventListener('pagehide',()=>{if(isDirty())cacheDraft();});
 window.addEventListener('focus',syncCloud);
-window.addEventListener('storage',event=>{if(event.key==='careerP0ProfileRevision')syncCloud();if(event.key===NOTICE&&event.newValue===null&&state.profile){state.deleted=true;clearTimeout(state.timer);state.intake=null;state.profile=null;state.csrf='';$('workspace').hidden=true;$('notice').hidden=false;status('noticeStatus','本人云端资料已在另一页面删除，此页面已停止上传。');}});
+window.addEventListener('storage',event=>{if(event.key==='careerP0ProfileRevision')syncCloud();if(event.key===NOTICE&&event.newValue===null&&state.profile){state.deleted=true;clearTimeout(state.timer);state.intake=null;state.profile=null;window.CareerIntakeProfile=null;state.csrf='';$('workspace').hidden=true;$('notice').hidden=false;status('noticeStatus','本人云端资料已在另一页面删除，此页面已停止上传。');}});
+$('questionAnswer').addEventListener('input', () => {
+  if (state.intake) storage('sessionStorage','setItem',answerCacheKey(),$('questionAnswer').value);
+});
+window.addEventListener('popstate', () => {
+  const draft = new URLSearchParams(location.search).get('draft');
+  if (draft && draft !== state.intake?.id) loadIntake(draft, null);
+  else if (!draft && state.intake) location.reload();
+});
+taskHeader();
 await loadCampaign();if(storage('localStorage','getItem',NOTICE)==='p0-v1')await startSession();

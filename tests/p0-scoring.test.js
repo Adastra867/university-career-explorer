@@ -92,10 +92,14 @@ test('hard eligibility is independent of coverage and unknown degree never means
 
 function pageContext(filename) {
   const elements=new Map();
-  const doc={addEventListener(){},createElement(){return {textContent:'',get innerHTML(){return this.textContent.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}};},getElementById(id){if(!elements.has(id))elements.set(id,{value:'',innerHTML:'',classList:{contains(){return false;},add(){},remove(){}}});return elements.get(id);}};
-  const context=vm.createContext({window:{CareerScoring,addEventListener(){}},document:doc,console,Intl,URL});
+  const doc={addEventListener(){},dispatchEvent(){},createElement(){return {textContent:'',get innerHTML(){return this.textContent.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}};},getElementById(id){if(!elements.has(id))elements.set(id,{value:'',innerHTML:'',classList:{contains(){return false;},add(){},remove(){}}});return elements.get(id);}};
+  const context=vm.createContext({window:{CareerScoring,addEventListener(){}},document:doc,console,Intl,URL,Event});
   const scripts=[...readFileSync(new URL('../'+filename,import.meta.url),'utf8').matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)].filter(m=>!m[1].includes('src='));
   vm.runInContext(scripts.at(-1)[2],context,{filename});
+  if (filename === 'index.html') {
+    const workspace = readFileSync(new URL('../scripts/career-workspace.js', import.meta.url), 'utf8');
+    vm.runInContext(workspace, context, { filename: 'career-workspace.js' });
+  }
   return context;
 }
 

@@ -51,7 +51,7 @@
       ['设计一节 30 分钟入门课：学习目标、互动环节和课后检验。',['目标可观察且适合基础。','活动与目标一致。','用具体任务检验理解。']],
       ['学生完成率不错，测验却不理想。你会如何诊断并调整？',['检查测验与教学目标。','分析错误类型并访谈。','补救教学后再评估。']]]}
   };
-  const blank = () => ({stage:'',role:'',industry:'',confirmed:false,jd:'',resume:'',transcript:[],written:null});
+  const blank = () => ({stage:'',role:'',industry:'',confirmed:false,jd:'',resume:'',transcript:[],written:null,interview:null,resumeReviewed:false});
   function load() {
     try {
       const raw = JSON.parse(localStorage.getItem(STORE) || '{}');
@@ -66,15 +66,61 @@
       if (raw.written && Array.isArray(raw.written.questions) && raw.written.questions.length === 3) {
         data.written = {industry:String(raw.written.industry||'').slice(0,40),group:String(raw.written.group||'').slice(0,40),role:String(raw.written.role||'').slice(0,80),questions:raw.written.questions.map(q => ({prompt:String(q.prompt||'').slice(0,1000),points:Array.isArray(q.points)?q.points.filter(x=>typeof x==='string').slice(0,5):[]})),answers:[0,1,2].map(i=>typeof raw.written.answers?.[i]==='string'?raw.written.answers[i].slice(0,5000):''),reviewed:raw.written.reviewed===true};
       }
+      const interview = raw.interview;
+      if (interview && Number.isInteger(interview.round) && interview.round >= 0 && interview.round < 4 &&
+          Array.isArray(interview.questions) && interview.questions.length === 4 && interview.questions.every(question => typeof question === 'string')) {
+        data.interview = {round:interview.round,followup:interview.followup===true,questions:interview.questions,answer:String(interview.answer||'').slice(0,5000)};
+      }
+      data.resumeReviewed = raw.resumeReviewed === true;
       return data;
     } catch (_) { return blank(); }
   }
   const state = load();
-  let session = null;
-  function save() { try { localStorage.setItem(STORE,JSON.stringify(state)); } catch (_) { $('targetStatus').textContent='本地存储不可用，当前输入可能无法在刷新后保留。'; } }
+  let session = state.interview;
+  let sprintStep = 0;
+  const sprintSteps = ['target', 'resume', 'practice'];
+  function sprintStatus() {
+    const complete = state.transcript.length > 0 && !session;
+    CareerShell.setStatus(complete ? '已完成' : state.role || state.resume || session || state.written ? '进行中' : '未开始');
+    const done = [state.stage && state.role && state.confirmed, state.resumeReviewed, complete || state.written?.reviewed].filter(Boolean).length;
+    $('sprintProgress').textContent = '第 ' + (sprintStep + 1) + ' / 3 步 · 已完成 ' + done + ' 项';
+  }
+  function showSprintStep() {
+    const key = location.hash.slice(1);
+    sprintStep = Math.max(0, sprintSteps.indexOf(key));
+    document.querySelectorAll('[data-sprint-panel]').forEach(panel => {
+      panel.hidden = panel.dataset.sprintPanel !== sprintSteps[sprintStep];
+    });
+    document.querySelectorAll('[data-sprint-step]').forEach(link => {
+      if (link.dataset.sprintStep === sprintSteps[sprintStep]) link.setAttribute('aria-current', 'page');
+      else link.removeAttribute('aria-current');
+    });
+    $('sprintNext').textContent = ['继续准备简历 →', '继续练习 →', '下载练习记录'][sprintStep];
+    sprintStatus();
+  }
+  function goToSprintStep(index) {
+    if (index < 0) { location.href = '/index.html'; return; }
+    const hash = '#' + sprintSteps[index];
+    if (location.hash !== hash) history.pushState(null, '', hash);
+    showSprintStep();
+    CareerShell.animate(document.querySelector('main'));
+    window.scrollTo({top:0, behavior:'instant'});
+  }
+  function save(track = true) {
+    state.interview = session ? { ...session, answer: $('answer').value } : null;
+    try {
+      localStorage.setItem(STORE,JSON.stringify(state));
+      if (track) CareerShell.remember('/career-prep.html' + location.hash, '求职冲刺');
+      sprintStatus();
+      return true;
+    } catch (_) {
+      $('sprintSaveStatus').textContent='本地存储不可用，当前输入可能无法在刷新后保留。';
+      return false;
+    }
+  }
   function text(parent,tag,value,className) { const el=document.createElement(tag);el.textContent=value;if(className)el.className=className;parent.appendChild(el);return el; }
   function result(parent,title,detail) { const box=text(parent,'div','', 'result');text(box,'strong',title);text(box,'p',detail); }
-  function requireTarget(statusId) { if (!state.stage || !state.confirmed || !state.role.trim()) { $(statusId).textContent='请先选择阶段、确认方向并填写目标岗位。';$('role').focus();return false; } $(statusId).textContent='';return true; }
+  function requireTarget(statusId) { if (!state.stage || !state.confirmed || !state.role.trim()) { $(statusId).textContent='请先选择阶段、确认方向并填写目标岗位。';goToSprintStep(0);$('role').focus();return false; } $(statusId).textContent='';return true; }
   function coreData() { try { return JSON.parse(localStorage.getItem('careerPredictor')||'{}'); } catch (_) { return {}; } }
   function importCore() {
     const core=coreData();if (!Object.keys(core).length) { $('targetStatus').textContent='没有找到现有测评资料，可手动填写。';return; }
@@ -85,7 +131,7 @@
   }
   function useExperience() {const exp=coreData().experienceText;if (typeof exp!=='string'||!exp.trim()) {$('targetStatus').textContent='现有测评中没有经历原文。';return;}if(state.resume.trim()&&!confirm('用已保存经历替换当前简历文本？'))return;state.resume=exp.slice(0,20000);$('resume').value=state.resume;save();$('targetStatus').textContent='已填入经历，请按简历格式补充教育与技能。';}
   function jdTerms(jd) {return SKILLS.filter(term=>jd.toLowerCase().includes(term.toLowerCase())).slice(0,15);}
-  function analyzeResume() {
+  function analyzeResume(restore = false) {
     if(!requireTarget('targetStatus'))return;const out=$('diagnosis');out.replaceChildren();const resume=state.resume.trim();
     if(resume.length<40){result(out,'先补充简历正文','至少写一段教育、项目或实习经历，才能给出有依据的建议。');return;}
     result(out,'本次目标：'+state.role,'把最相关的经历放在显眼位置，并用证据解释岗位匹配。');
@@ -95,7 +141,7 @@
     if(!/\d+\s*(%|％|人|次|份|个|万元?|小时|天|周|月)|提升|降低|节省|交付|反馈/.test(resume))result(out,'补充可核实的结果','可以写真实数字、交付物或反馈，不要编造数据。');
     if(!/技能|工具|证书|语言/.test(resume))result(out,'列出相关技能','仅写实际用过且能在面试中解释的工具和方法。');
     const terms=jdTerms(state.jd);if(terms.length){const present=terms.filter(t=>resume.toLowerCase().includes(t.toLowerCase()));const missing=terms.filter(t=>!present.includes(t));result(out,'JD 字面覆盖：'+present.length+'/'+terms.length,'这是术语检查，不代表能力或筛选通过率。只补充能用经历证明的要求。');if(present.length)text(out,'div','已体现：'+present.join('、'),'chip');if(missing.length)text(out,'div','待核对：'+missing.join('、'),'chip');}else result(out,'对照真实 JD','找出 3—5 项核心任务，逐条核对简历证据。');
-    result(out,'改写句式','我负责【任务】，使用【方法】完成【产出】，带来【真实结果或反馈】。');result(out,'投递前人工复核','检查事实、时间线、错字和附件格式。');
+    result(out,'改写句式','我负责【任务】，使用【方法】完成【产出】，带来【真实结果或反馈】。');result(out,'投递前人工复核','检查事实、时间线、错字和附件格式。');state.resumeReviewed=true;if(!restore)save();
   }
   function resolveIndustry() {if(state.industry)return state.industry;const value=state.role+' '+state.jd.slice(0,1500);if(/银行|证券|保险|基金|信贷|金融/.test(value))return 'finance';if(/制造|工厂|机械|汽车|生产线|供应链/.test(value))return 'manufacturing';if(/电商|零售|门店|快消/.test(value))return 'retail';if(/医疗|医药|医院|健康|护理/.test(value))return 'healthcare';if(/教育|教学|教研|培训|课程/.test(value))return 'education';if(/互联网|软件|平台|应用|游戏|开发/.test(value))return 'internet';return 'general';}
   function resolveGroup() {const role=state.role;if(/开发|程序|软件工程|前端|后端|测试工程|运维|developer|software engineer/i.test(role))return 'software';if(/数据分析|商业分析|算法|统计|BI\b|data analyst|data scientist/i.test(role))return 'data';if(/运营|市场|营销|推广|品牌|新媒体|marketing|operations/i.test(role))return 'operations';if(/产品经理|产品助理|用户研究|product manager/i.test(role))return 'product';if(/财务|会计|审计|投研|风控|accountant|financial analyst/i.test(role))return 'finance';if(/人力|招聘|组织发展|HR\b|recruiter/i.test(role))return 'hr';if(/销售|商务|客户成功|客户经理|sales|customer success/i.test(role))return 'sales';if(/设计|交互|视觉|UI\b|UX\b|designer/i.test(role))return 'design';if(/机械|工艺|质量|设备|制造|工程师|mechanical engineer/i.test(role))return 'engineering';if(/教师|教学|教研|讲师|teacher|instructor/i.test(role))return 'education';if(/SQL|Python|数据分析/.test(state.jd))return 'data';return 'general';}
@@ -116,18 +162,28 @@
   function showQuestion(prompt){$('questionBox').classList.remove('hidden');$('roundLabel').textContent=session.followup?`第 ${session.round+1} 轮 · 追问`:`第 ${session.round+1} / 4 轮`;$('questionText').textContent=prompt||session.questions[session.round];}
   function startInterview(){if(!requireTarget('interviewStatus'))return;if(state.transcript.length&&!confirm('开始新面试将清空当前问答记录，继续吗？'))return;state.transcript=[];session={round:0,followup:false,questions:interviewQuestions()};$('answer').value='';$('answerWrap').classList.remove('hidden');showQuestion();renderTranscript();save();$('answer').focus();}
   function evaluate(round,answer){const notes=[];if(answer.length<80)notes.push('回答较短，可补充具体场景与个人贡献。');if(round===0){if(!answer.includes(state.role.trim()))notes.push('请把经历与目标岗位联系起来。');if(!/实习|项目|科研|竞赛|课程|社团/.test(answer))notes.push('加入一段相关经历作证据。');}else if(round===1){if(!/负责|设计|分析|协调|推动|完成|开发|组织|优化|策划/.test(answer))notes.push('说清你本人采取的行动。');if(!/结果|提升|降低|交付|完成|获得|反馈|\d/.test(answer))notes.push('补充真实结果或交付物。');}else if(round===2){if(!/目标|需求|问题|指标|确认/.test(answer))notes.push('先确认目标和成功标准。');if(!/验证|复盘|反馈|测试|评估|数据|结果/.test(answer))notes.push('说明如何验证方案。');}else if(!/团队|业务|岗位|目标|协作|成长|考核|项目/.test(answer))notes.push('反问可聚焦团队任务、岗位成功标准或协作。');if(!notes.length)notes.push('结构基本完整，继续用可核实的细节增强说服力。');return notes;}
-  function submitAnswer(){if(!session)return;const answer=$('answer').value.trim();if(answer.length<12){$('interviewStatus').textContent='请先写出至少一句完整回答。';return;}const notes=evaluate(session.round,answer);state.transcript.push({question:$('questionText').textContent,answer,feedback:notes.join(' ')});$('answer').value='';renderTranscript();save();$('interviewStatus').textContent='';if(session.followup){session.followup=false;session.round++;}else if(session.round===1&&notes.some(n=>/本人采取|真实结果/.test(n))){session.followup=true;showQuestion('追问：请补充你本人采取的关键行动，以及可核实的结果或反馈。');$('answer').focus();return;}else session.round++;if(session.round>=4){session=null;$('questionBox').classList.add('hidden');$('answerWrap').classList.add('hidden');$('interviewStatus').textContent='四轮练习已完成，可下载记录后重练。';return;}showQuestion();$('answer').focus();}
+  function submitAnswer(){if(!session)return;const answer=$('answer').value.trim();if(answer.length<12){$('interviewStatus').textContent='请先写出至少一句完整回答。';return;}const notes=evaluate(session.round,answer);state.transcript.push({question:$('questionText').textContent,answer,feedback:notes.join(' ')});$('answer').value='';renderTranscript();$('interviewStatus').textContent='';if(session.followup){session.followup=false;session.round++;}else if(session.round===1&&notes.some(n=>/本人采取|真实结果/.test(n))){session.followup=true;showQuestion('追问：请补充你本人采取的关键行动，以及可核实的结果或反馈。');save();$('answer').focus();return;}else session.round++;if(session.round>=4){session=null;$('questionBox').classList.add('hidden');$('answerWrap').classList.add('hidden');$('interviewStatus').textContent='四轮练习已完成，可下载记录后重练。';save();return;}showQuestion();save();$('answer').focus();}
   function renderTranscript(){const box=$('transcript');box.replaceChildren();if(!state.transcript.length)return;text(box,'h3','问答记录与反馈');state.transcript.forEach((turn,i)=>{const item=text(box,'div','', 'turn');text(item,'small','问题 '+(i+1));text(item,'p',turn.question);text(item,'small','你的回答');text(item,'p',turn.answer);text(item,'div',turn.feedback||'', 'feedback');});}
   function download(name,content,type){const url=URL.createObjectURL(new Blob([content],{type}));const link=document.createElement('a');link.href=url;link.download=name;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   function exportRecord(){if(!state.transcript.length&&!state.written){$('interviewStatus').textContent='请先练习面试或生成笔试题。';return;}const lines=[`目标岗位：${state.role}`,`阶段：${state.stage}`,`导出时间：${new Date().toLocaleString('zh-CN')}`,''];state.transcript.forEach((t,i)=>lines.push(`${i+1}. ${t.question}`,`回答：${t.answer}`,`反馈：${t.feedback}`,''));if(state.written){lines.push(`笔试练习：${state.written.industry} · ${state.written.group}`,'');state.written.questions.forEach((q,i)=>lines.push(`第 ${i+1} 题：${q.prompt}`,`回答：${state.written.answers[i]||'未作答'}`,`参考要点：${q.points.join('；')}`,''));}download('求职练习记录.txt',lines.join('\n'),'text/plain;charset=utf-8');}
   function renderSources(){const box=$('sources');KNOWLEDGE.forEach(item=>{const card=text(box,'div','', 'source');const link=text(card,'a',item.topic+' · '+item.title+' ↗');link.href=item.url;link.target='_blank';link.rel='noopener noreferrer';text(card,'p',item.points.join(' '));});}
   function fill(){['stage','role','industry','jd','resume'].forEach(id=>$(id).value=state[id]);$('confirmed').checked=state.confirmed;renderTranscript();renderWritten();}
-  ['stage','role','industry','jd','resume'].forEach(id=>$(id).addEventListener('input',()=>{state[id]=$(id).value;save();}));$('confirmed').addEventListener('change',()=>{state.confirmed=$('confirmed').checked;save();});
-  $('importBtn').addEventListener('click',importCore);$('experienceBtn').addEventListener('click',useExperience);$('analyzeBtn').addEventListener('click',analyzeResume);$('startBtn').addEventListener('click',startInterview);$('submitBtn').addEventListener('click',submitAnswer);$('generateWrittenBtn').addEventListener('click',generateWritten);$('reviewWrittenBtn').addEventListener('click',reviewWritten);$('exportBtn').addEventListener('click',exportRecord);$('downloadKbBtn').addEventListener('click',()=>download('职途星轨-求职知识包.json',JSON.stringify({title:'职途星轨求职知识包',description:'本站根据公开资料整理的练习要点，请通过链接阅读原文。',items:KNOWLEDGE},null,2),'application/json;charset=utf-8'));
+  ['stage','role','industry','jd','resume'].forEach(id=>$(id).addEventListener('input',()=>{state[id]=$(id).value;state.resumeReviewed=false;save();}));$('confirmed').addEventListener('change',()=>{state.confirmed=$('confirmed').checked;save();});
+    document.querySelectorAll('[data-sprint-step]').forEach(link => link.addEventListener('click', event => {
+    event.preventDefault();
+    goToSprintStep(sprintSteps.indexOf(link.dataset.sprintStep));
+  }));
+  window.addEventListener('popstate', showSprintStep);
+  $('sprintBack').onclick = () => goToSprintStep(sprintStep - 1);
+  $('sprintSave').onclick = () => { if (save()) $('sprintSaveStatus').textContent = '草稿已保存在当前浏览器。'; };
+  $('sprintNext').onclick = () => sprintStep < 2 ? goToSprintStep(sprintStep + 1) : exportRecord();
+  $('answer').addEventListener('input', () => save());
+  $('importBtn').addEventListener('click',importCore);$('experienceBtn').addEventListener('click',useExperience);$('analyzeBtn').addEventListener('click',()=>analyzeResume());$('startBtn').addEventListener('click',startInterview);$('submitBtn').addEventListener('click',submitAnswer);$('generateWrittenBtn').addEventListener('click',generateWritten);$('reviewWrittenBtn').addEventListener('click',reviewWritten);$('exportBtn').addEventListener('click',exportRecord);$('downloadKbBtn').addEventListener('click',()=>download('职途星轨-求职知识包.json',JSON.stringify({title:'职途星轨求职知识包',description:'本站根据公开资料整理的练习要点，请通过链接阅读原文。',items:KNOWLEDGE},null,2),'application/json;charset=utf-8'));
   // The shared profile supplies public background; practice transcripts remain local.
   function applySharedProfile(profile) {
     if (!profile?.fields) return;
     const value = path => { const field=profile.fields[path];if(field?.value===null&&field.source_type==='user_form')return '';return field?.value_state==='known'&&field.source_type!=='ai_inference'?field.value:null; };
+    const previous = [state.resume, state.stage, state.role, state.jd].join('\u0000');
     const experience=value('experience.text'),stage=value('education.stage'),target=value('preferences.long_term_goal');
     if (experience!==null&&!window.CareerProfile?.isEditing('experience.text')) state.resume=experience;
     if (stage!==null) state.stage=/大三/.test(stage)?'junior':/大四/.test(stage)?'senior':'other';
@@ -137,12 +193,22 @@
       state.confirmed=['confirmed','corrected'].includes(field.confirmation_state);
     }
     const intake=window.CareerProfile?.currentIntake;
-    if (intake?.conditions?.jd) state.jd=intake.conditions.jd;
+    if (intake?.conditions?.jd && !state.jd) state.jd=intake.conditions.jd;
+    const changed = previous !== [state.resume, state.stage, state.role, state.jd].join('\u0000');
+    if (changed) state.resumeReviewed = false;
     fill();
+    sprintStatus();
     $('targetStatus').textContent='已读取全站统一资料。资料变化后，请重新诊断；本地练习记录仍保留。';
-    const diagnosis=$('diagnosis');if(diagnosis.children.length&&diagnosis.textContent.indexOf('填写目标岗位和简历后开始诊断。')<0){diagnosis.replaceChildren();result(diagnosis,'使用此前资料生成','统一资料已更新，可重新点击“诊断简历”。');}
+    const diagnosis=$('diagnosis');if(changed&&diagnosis.children.length&&diagnosis.textContent.indexOf('填写目标岗位和简历后开始诊断。')<0){diagnosis.replaceChildren();result(diagnosis,'使用此前资料生成','统一资料已更新，可重新点击“诊断简历”。');}
   }
   window.addEventListener('career-profile-updated',event=>applySharedProfile(event.detail));
   fill();renderSources();
+  if (session) {
+    $('answer').value = session.answer;
+    $('answerWrap').classList.remove('hidden');
+    showQuestion(session.followup ? '追问：请补充你本人采取的关键行动，以及可核实的结果或反馈。' : undefined);
+  }
+  showSprintStep();
+  if (state.resumeReviewed && state.stage && state.role && state.confirmed) analyzeResume(true);
   if(window.CareerProfile?.profile)applySharedProfile(window.CareerProfile.profile);
 })();

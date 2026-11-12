@@ -53,13 +53,13 @@ export function sanitizeAuthorizedProfile(profile) {
   return facts;
 }
 
-function attributionURL(raw, officialOnly = false) {
+function attributionURL(raw, allowedDomains) {
   if (!raw) return '';
   try {
     const url = new URL(raw);
     const hostname = url.hostname.toLowerCase();
     if (url.protocol !== 'https:' || url.username || url.password || isIP(hostname.replace(/^\[|\]$/g, '')) || hostname === 'localhost' || hostname.endsWith('.local')) return '';
-    if (officialOnly && !ALLOWED_SEARCH_DOMAINS.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`))) return '';
+    if (allowedDomains && !allowedDomains.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`))) return '';
     url.hash = '';
     for (const key of [...url.searchParams.keys()]) if (/^utm_|^trk$|^fbclid$/.test(key)) url.searchParams.delete(key);
     return url.href;
@@ -122,7 +122,7 @@ function sourceRecord(source, excerpt, now) {
   };
 }
 
-function rankSources(sources, question, context, now) {
+function rankSources(sources, question, context, now, includeDocumentFallback = false) {
   const queryWords = words(question);
   const focusWords = words((context?.nodes || []).map((node) => `${node.title} ${node.kind}`).join(' '));
   const ranked = [];
@@ -131,7 +131,8 @@ function rankSources(sources, question, context, now) {
       const haystack = `${source.title} ${(source.keywords || []).join(' ')} ${chunk.text}`.toLowerCase();
       const queryScore = queryWords.reduce((score, word) => score + (haystack.includes(word) ? (source.title.toLowerCase().includes(word) ? 4 : 2) : 0), 0);
       const focusScore = focusWords.reduce((score, word) => score + (haystack.includes(word) ? .5 : 0), 0);
-      if (queryScore === 0 && focusScore < 1) continue;
+      const documentFallback = includeDocumentFallback && source.category === 'user_document' && chunk.start === 0;
+      if (queryScore === 0 && focusScore < 1 && !documentFallback) continue;
       const record = sourceRecord(source, chunk.text, now);
       const expiredByAge = record.expiresAt ? Date.parse(record.expiresAt) <= now : false;
       const olderLivePosting = source.category === 'live_search' && source.publishedAt && now - Date.parse(source.publishedAt) > 30 * DAY;
@@ -140,24 +141,33 @@ function rankSources(sources, question, context, now) {
       ranked.push({
         ...record, sourceId: record.id, hash: record.contentHash, source: record,
         locator: `${record.locator}${source.content?.length > 800 ? `；片段字符 ${chunk.start + 1}–${chunk.end}` : ''}`,
-        excerpt: chunk.text, applicability: source.applicability || '', stale,
+        excerpt: chunk.text, applicability: source.applicability || '', stale, category: source.category,
         verificationStatus: source.trustLevel === 'official' && source.category !== 'live_search' ? stale ? 'official_snapshot_stale' : 'official_snapshot_checked' : source.category === 'live_search' ? 'official_search_excerpt_unverified' : 'user_provided_unverified',
         origin: source.category === 'live_search' ? 'live_search' : source.trustLevel === 'user_provided' ? 'user_document' : 'offline_kb', score,
       });
     }
   }
   const seen = new Set(), perSource = new Map();
-  return ranked.sort((a, b) => b.score - a.score).filter((entry) => {
+  const candidates = ranked.sort((a, b) => b.score - a.score).filter((entry) => {
     const key = `${entry.url}|${hash(entry.excerpt)}`;
     if (seen.has(key) || (perSource.get(entry.sourceId) || 0) >= 2) return false;
     seen.add(key); perSource.set(entry.sourceId, (perSource.get(entry.sourceId) || 0) + 1);
     return true;
-  }).slice(0, 6);
+  });
+  if (!includeDocumentFallback) return candidates.slice(0, 6);
+
+  const documentMatches = new Map();
+  for (const entry of candidates) {
+    if (entry.origin === 'user_document' && !documentMatches.has(entry.sourceId)) documentMatches.set(entry.sourceId, entry);
+  }
+  const reserved = new Set(documentMatches.values());
+  const otherMatches = candidates.filter((entry) => !reserved.has(entry)).slice(0, 6 - reserved.size);
+  return [...reserved, ...otherMatches].sort((a, b) => b.score - a.score);
 }
 
-function liveRecords(items, now) {
+function liveRecords(items, now, allowedDomains) {
   return (Array.isArray(items) ? items : []).slice(0, 8).flatMap((item) => {
-    const url = attributionURL(item?.url, true);
+    const url = attributionURL(item?.url, allowedDomains);
     const content = clean(item?.content || item?.snippet, 2400);
     if (!url || !content) return [];
     const host = new URL(url).hostname;
@@ -190,27 +200,27 @@ export function createResearchService(options = {}) {
       return { ...record, sourceId: record.id, stale: !!record.expiresAt && Date.parse(record.expiresAt) <= at };
     }), notice: '有限离线资料，核对日期不等于实时有效性；用户上传资料仅本次使用。' };
   }
-  async function retrieve({ question, context, contextSummary, documents, liveSearch = false }, { signal } = {}) {
+  async function retrieve({ question, context, contextSummary, documents, liveSearch = false }, { signal, publicSearchQuery, searchDomains = ALLOWED_SEARCH_DOMAINS, additionalSources = [], includeDocumentFallback = false } = {}) {
     const at = now();
     if (typeof question !== 'string' || !question.trim() || question.length > 4000) invalid('检索问题须为 4000 字以内的非空文本。');
     const uploaded = userDocuments(documents, at);
     let liveSearchPerformed = false, degraded = false, reasonCode = 'OFFLINE_KB', external = [];
-    const factual = isHardFactQuestion(question);
-    if (liveSearch === true && factual) {
+    const factual = isHardFactQuestion(publicSearchQuery ?? question);
+    if (liveSearch === true && (publicSearchQuery || factual)) {
       if (!configured) { degraded = true; reasonCode = 'SEARCH_NOT_CONFIGURED'; }
       else {
         let timeout;
         let aborted;
         try {
           if (signal?.aborted) throw Object.assign(new Error('cancelled'), { name: 'AbortError' });
-          const query = clean(question.replace(/https?:\/\/\S+/gi, ' ').replace(/[\r\n]/g, ' '), 320);
+          const query = clean((publicSearchQuery ?? question).replace(/https?:\/\/\S+/gi, ' ').replace(/[\r\n]/g, ' '), 320);
           liveSearchPerformed = true;
           const cancelled = new Promise((_, reject) => {
             timeout = setTimeout(() => reject(new Error('search timeout')), timeoutMs);
             if (signal) { aborted = () => reject(Object.assign(new Error('cancelled'), { name: 'AbortError' })); signal.addEventListener('abort', aborted, { once: true }); }
           });
-          const result = await Promise.race([client.advancedSearch(query, { count: 6, needContent: false, needSummary: false, needUrl: true, sites: ALLOWED_SEARCH_DOMAINS.join(',') }), cancelled]);
-          external = liveRecords(result.web_items, at);
+          const result = await Promise.race([client.advancedSearch(query, { count: 6, needContent: false, needSummary: false, needUrl: true, sites: searchDomains.join(',') }), cancelled]);
+          external = liveRecords(result.web_items, at, searchDomains);
           reasonCode = external.length ? 'LIVE_AND_LOCAL' : 'SEARCH_NO_VERIFIABLE_RESULTS';
           degraded = external.length === 0;
         } catch (error) {
@@ -219,7 +229,8 @@ export function createResearchService(options = {}) {
         } finally { clearTimeout(timeout); if (aborted) signal.removeEventListener('abort', aborted); }
       }
     }
-    const evidence = reflectionOnly(question) && !uploaded.length ? [] : rankSources([...uploaded, ...sources, ...external], question, context, at);
+    const rankingQuery = publicSearchQuery ? `${publicSearchQuery}\n${question}` : question;
+    const evidence = !publicSearchQuery && reflectionOnly(question) && !uploaded.length ? [] : rankSources([...uploaded, ...sources, ...additionalSources, ...external], rankingQuery, context, at, includeDocumentFallback);
     const citations = [...new Map(evidence.map((entry) => [entry.sourceId, { sourceId: entry.sourceId, title: entry.title, url: entry.url, publisher: entry.publisher, checkedAt: entry.checkedAt, ...(entry.publishedAt ? { publishedAt: entry.publishedAt } : {}), locator: entry.locator, relevantExcerpt: entry.excerpt, stale: entry.stale, trustLevel: entry.trustLevel }])).values()];
     const sourceRecords = [...new Map(evidence.map((entry) => [entry.sourceId, entry.source])).values()];
     const routes = contextSummary?.paths?.map((path) => path.titles.join(' → ')).join('；') || contextSummary?.selectedTitles?.join('、') || '本次授权的路径';

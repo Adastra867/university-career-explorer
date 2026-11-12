@@ -45,8 +45,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\deploy.ps1
 ## 页面与协作
 
 - `/`：方向探索、能力画像、JD 匹配与报告。
+- `/index.html#intelligence`：职业规划 AI，支持个人画像、方向探索、阶段计划、路线比较和成长建议。路线可审阅后写入 `/trees`，职业树中也可选节点继续探索或比较。
 - `/job-search.html`：岗位搜索与匹配。
 - `/career-prep.html`：简历诊断、岗位笔试与模拟面试；使用本地规则与本浏览器保存，无需模型密钥。
 - `/trees`：职业树画布。
+
+首页和岗位页从本站加载已编译的 `styles/tailwind.css`。修改 Tailwind 类或主题后，运行 `pnpm build:styles` 并提交生成的 CSS。
+
+职业规划 AI 使用职业树的服务端 `JOURNEY_AI_*` 配置，支持 `.env` 中的 `JOURNEY_AI_API_KEY` 和 `JOURNEY_AI_MODEL`，DeepSeek 配置示例见 [Journey 环境变量](journey/.env.example)。使用个人资料、历史和文件内容由用户勾选，联网搜索单独使用公开搜索词。确认保存的规划记录和职业树保存在当前浏览器。
 
 求职练习的页面与样式在 `career-prep.html`，规则和题库在 `scripts/career-prep.js`，首页衔接在 `index.html`。组员获得仓库协作权限后，创建分支并通过 Pull Request 提交；在本地验证简历诊断、笔试、面试与刷新保存后合并到 `main`，由原 Render 服务自动发布。

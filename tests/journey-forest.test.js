@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { TreeLibrary, FOREST_KEY, TREE_TYPES } from '../journey/forest.js';
 import { GraphStore, STORAGE_KEY, BACKUP_KEY } from '../journey/store.js';
 import { createGraph, validateGraph } from '../journey/graph.js';
+import { getCareerNodeContext, listCareerTrees, saveCareerBranches } from '../journey/career-intelligence-tree.js';
 
 const WORKSPACE_KEY = 'shiyu-zuxia.workspace.v1';
 const PROTOTYPE_KEY = 'shiyuzuxia_forest_demo_v3';
@@ -294,4 +295,65 @@ test('quota fallback graph import keeps current, reopened and exported state ali
   assert.equal(statuses.at(-1).state, 'error'); assert.match(statuses.at(-1).message, /页面内存/);
   assert.equal(store.undo(), true); assert.equal(store.graph.title, '导入之前');
   assert.equal(store.save(), false); assert.equal(open(t, library, entry.id).store.graph.title, '导入之前');
+});
+
+test('confirmed intelligence branches reopen on the regular canvas and retries reuse the same nodes', () => {
+  const { library, storage } = fixture();
+  const request = {
+    turnId: 'insight_example', question: '电池仿真经验还能如何迁移？', summary: '从已做过的工作探索方向。',
+    branches: [{ id: 'route-a', title: '电池数字孪生', reason: '已有仿真项目', evidenceIds: ['source-a'] }],
+    evidence: [{ sourceId: 'source-a', title: '技术资料', url: 'https://example.com/reference', excerpt: '不复制到树中的个人资料' }],
+  };
+  const first = saveCareerBranches(request, storage);
+  assert.deepEqual(saveCareerBranches(request, storage), first);
+  assert.equal(library.list().length, 1);
+  assert.equal(first.href, `/trees/${first.treeId}#node=${first.nodeIds[0]}`);
+  const document = library.exportTree(first.treeId).document;
+  const saved = document.graph.nodes.find(node => node.id === first.nodeIds[0]);
+  assert.equal(saved.knowledgeStatus, 'unverified');
+  assert.equal(saved.attributes.careerIntelligence.turnId, request.turnId);
+  assert.deepEqual(saved.attributes.careerIntelligence.branch, request.branches[0]);
+  assert.deepEqual(saved.attributes.careerIntelligence.evidence, [{ sourceId: 'source-a', title: '技术资料', url: 'https://example.com/reference' }]);
+  assert.equal(document.undo[0].nodes.length, 1);
+});
+
+test('intelligence adoption adds under the chosen parent and only updates a selected public node', t => {
+  const { library, storage } = fixture();
+  const entry = library.create('career', '工作与深造');
+  const original = open(t, library, entry.id).store;
+  const parentId = branch(original, '研发');
+  const privateId = branch(original, '未公开的项目');
+  original.commit([{ op: 'update_node', nodeId: privateId, patch: { private: true } }]);
+  assert.equal(original.save(), true);
+  assert.equal(listCareerTrees(storage)[0].nodes.some(node => node.id === privateId), false);
+  assert.throws(() => getCareerNodeContext(entry.id, privateId, storage), /请选择可用于 AI 分析/);
+  const request = { treeId: entry.id, parentNodeId: parentId, turnId: 'turn-1', branches: [{ id: 'branch-1', title: '材料信息学', description: '验证数据建模兴趣' }] };
+  const [id] = saveCareerBranches(request, storage).nodeIds;
+  assert.deepEqual(getCareerNodeContext(entry.id, id, storage), { title: '材料信息学', description: '验证数据建模兴趣', parentTitle: '研发' });
+  const existing = library.exportTree(entry.id).document.graph;
+  const update = { ...request, updateNodeId: id, turnId: 'turn-2', branches: [{ id: 'branch-2', title: '材料研发算法', description: '用公开数据先完成基线' }] };
+  assert.throws(() => saveCareerBranches({ ...update, updateNodeId: privateId }, storage), /待更新节点/);
+  assert.deepEqual(saveCareerBranches(update, storage).nodeIds, [id]);
+  assert.deepEqual(saveCareerBranches(update, storage).nodeIds, [id]);
+  assert.deepEqual(saveCareerBranches(request, storage).nodeIds, [id]);
+  const next = library.exportTree(entry.id).document.graph;
+  assert.deepEqual(next.edges, existing.edges);
+  assert.deepEqual(next.nodes.find(node => node.id === privateId), existing.nodes.find(node => node.id === privateId));
+  assert.equal(next.nodes.find(node => node.id === id).title, '材料研发算法');
+  assert.deepEqual(next.nodes.find(node => node.id === id).attributes.careerIntelligence.previous, [{ turnId: 'turn-1', branchId: 'branch-1' }]);
+});
+
+test('failed storage leaves an existing career tree intact and a new tree unlisted', () => {
+  const { library, storage } = fixture();
+  const entry = library.create('career', '现有职业树');
+  const key = library.keys(entry.id).graph;
+  const original = storage.getItem(key);
+  const request = { turnId: 'turn', branches: [{ id: 'branch', title: '分支' }] };
+  storage.failWrite = key;
+  assert.throws(() => saveCareerBranches({ ...request, treeId: entry.id }, storage), /保存|刷新/);
+  assert.equal(storage.getItem(key), original);
+  storage.failWrite = FOREST_KEY;
+  assert.throws(() => saveCareerBranches(request, storage), /无法保存新的职业树/);
+  assert.deepEqual(library.list().map(tree => tree.id), [entry.id]);
+  assert.deepEqual([...storage.values.keys()].filter(item => item.endsWith('.graph.v1')), [key]);
 });

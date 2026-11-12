@@ -7,38 +7,11 @@
   <meta name="description" content="从专业、能力与经历出发，用五步看见更适合你的方向，把模糊的可能，连成一条可以出发的路。">
   <script type="module" src="/scripts/job-scoring.js"></script>
   <script defer src="/p0/profile-adapter.js"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script src="/vendor/chart.umd.js"></script>
   <script async src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" integrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <link rel="preconnect" href="https://fonts.googleapis.cn">
   <link rel="preconnect" href="https://fonts.gstatic.cn" crossorigin>
   <link href="https://fonts.googleapis.cn/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Inter', '-apple-system', 'PingFang SC', 'Microsoft YaHei', 'sans-serif'],
-          },
-          colors: {
-            primary: { 50:'#EEF2FF',100:'#E0E7FF',200:'#C7D2FE',300:'#A5B4FC',400:'#818CF8',500:'#6366F1',600:'#4F46E5',700:'#4338CA' },
-            accent: { 400:'#2DD4BF', 500:'#14B8A6', 600:'#0D9488' },
-            warm: { 50:'#FAFAF9', 100:'#F5F5F4' },
-          },
-          animation: {
-            'pulse-soft': 'pulseSoft 2s ease-in-out infinite',
-            'shimmer': 'shimmer 2s linear infinite',
-            'fade-up': 'fadeUp 0.4s ease-out',
-          },
-          keyframes: {
-            pulseSoft: { '0%,100%': { opacity:'1' }, '50%': { opacity:'0.7' } },
-            shimmer: { '0%': { backgroundPosition:'-200% 0' }, '100%': { backgroundPosition:'200% 0' } },
-            fadeUp: { '0%': { opacity:'0', transform:'translateY(16px)' }, '100%': { opacity:'1', transform:'translateY(0)' } },
-          }
-        }
-      }
-    }
-  </script>
   <style>
     * { box-sizing: border-box; }
     body { background: #FAFAF9; color: #1E293B; font-family: 'Inter', -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif; }
@@ -52,25 +25,11 @@
     .btn-secondary { background: #fff; color: #4F46E5; border: 2px solid #E0E7FF; border-radius: 10px; padding: 10px 24px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; }
     .btn-secondary:hover { border-color: #4F46E5; background: #EEF2FF; }
     .btn-primary:focus-visible, .btn-secondary:focus-visible, .history-record button:focus-visible { outline: 3px solid rgba(79,70,229,0.35); outline-offset: 2px; }
-    .step-item { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px 12px; border-radius: 8px; transition: all 0.3s ease; font-size: 13px; white-space: nowrap; }
-    .step-item.active { background: linear-gradient(135deg, #4F46E5, #7C3AED); color: #fff; }
-    .step-item.completed { color: #14B8A6; }
-    .step-item .step-num { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; }
-    .step-item.active .step-num { background: rgba(255,255,255,0.25); color: #fff; }
-    .step-item.completed .step-num { background: #14B8A6; color: #fff; }
-    .step-item:not(.active):not(.completed) .step-num { background: #E2E8F0; color: #64748B; }
-    .step-section { display: none; }
-    .step-section.active { display: block; animation: fadeUp 0.4s ease-out; }
-    .progress-bar { height: 4px; background: #E2E8F0; border-radius: 4px; overflow: hidden; }
-    .progress-bar .fill { height: 100%; background: linear-gradient(90deg, #4F46E5, #7C3AED, #14B8A6); background-size: 200% 100%; animation: shimmer 3s linear infinite; border-radius: 4px; transition: width 0.5s ease; }
     .tag { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; }
     .tag-primary { background: #EEF2FF; color: #4F46E5; }
     .tag-accent { background: #F0FDFA; color: #0D9488; }
     .tag-warn { background: #FFFBEB; color: #D97706; }
     .tag-success { background: #ECFDF5; color: #059669; }
-    .chat-bubble { max-width: 85%; padding: 14px 18px; border-radius: 16px; line-height: 1.7; font-size: 14px; }
-    .chat-user { background: linear-gradient(135deg, #4F46E5, #7C3AED); color: #fff; border-bottom-right-radius: 4px; margin-left: auto; }
-    .chat-bot { background: #fff; color: #1E293B; border: 1px solid #E2E8F0; border-bottom-left-radius: 4px; }
     .radio-card { border: 2px solid #E2E8F0; border-radius: 10px; padding: 12px 16px; cursor: pointer; transition: all 0.2s ease; }
     .radio-card:hover { border-color: #A5B4FC; background: #EEF2FF; }
     .radio-card.selected { border-color: #4F46E5; background: #EEF2FF; }
@@ -90,11 +49,6 @@
       #reportContent .report-keep-together, #topCareers > div, .action-check { break-inside: avoid; page-break-inside: avoid; }
       #reportContent .card { box-shadow: none; transform: none !important; }
     }
-    .knowledge-source { font-size: 12px; color: #64748B; border-top: 1px dashed #E2E8F0; margin-top: 10px; padding-top: 8px; }
-    .typing-indicator span { display: inline-block; width: 6px; height: 6px; background: #A5B4FC; border-radius: 50%; margin: 0 2px; animation: bounce 1.4s infinite ease-in-out; }
-    .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
-    .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
-    @keyframes bounce { 0%,80%,100% { transform:scale(0); } 40% { transform:scale(1); } }
     textarea, input[type="text"] { border: 2px solid #E2E8F0; border-radius: 10px; padding: 12px 16px; width: 100%; font-size: 14px; transition: border-color 0.2s; outline: none; font-family: inherit; resize: vertical; }
     textarea:focus, input[type="text"]:focus { border-color: #A5B4FC; }
     .action-check { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; background: #FAFAF9; cursor: pointer; transition: all 0.2s; }
@@ -120,11 +74,6 @@
     .history-record { border: 1px solid #E2E8F0; border-radius: 12px; background: #fff; padding: 16px; transition: all 0.2s ease; }
     .history-record:hover { border-color: #A5B4FC; box-shadow: 0 6px 18px rgba(79,70,229,0.07); }
     .history-record.active { border-color: #14B8A6; box-shadow: 0 0 0 1px #14B8A6; }
-    .assistant-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,0.45); z-index: 70; backdrop-filter: blur(2px); }
-    .assistant-panel { position: fixed; z-index: 80; right: 16px; bottom: 16px; width: min(460px, calc(100vw - 32px)); height: min(720px, calc(100vh - 32px)); background: #FAFAF9; border-radius: 18px; box-shadow: 0 24px 70px rgba(15,23,42,0.28); overflow: hidden; display: flex; flex-direction: column; }
-    .assistant-panel.hidden, .assistant-backdrop.hidden { display: none; }
-    .assistant-chat-scroll { min-height: 0; overflow-y: auto; }
-    .floating-assistant { position: fixed; right: 20px; bottom: 20px; z-index: 60; box-shadow: 0 10px 30px rgba(79,70,229,0.32); }
     .save-toast { position: fixed; top: 88px; left: 50%; transform: translateX(-50%); z-index: 100; max-width: min(520px, calc(100vw - 32px)); border-radius: 12px; padding: 12px 18px; box-shadow: 0 12px 34px rgba(15,23,42,0.18); font-size: 14px; font-weight: 600; }
     .save-toast.hidden { display: none; }
     .pdf-exporting .card, .pdf-exporting .card:hover { transform: none !important; box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04) !important; }
@@ -133,242 +82,226 @@
     .pdf-exporting .report-summary-grid { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
     .pdf-exporting .report-ability-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
     .pdf-exporting #reportRadarChart { margin-left: auto !important; margin-right: auto !important; }
-    @media (max-width: 640px) {
-      .assistant-panel { inset: 0; width: 100%; height: 100%; border-radius: 0; }
-      .floating-assistant { right: 14px; bottom: 14px; width: 48px; height: 48px; padding: 0; justify-content: center; border-radius: 999px; }
-      .floating-assistant span { display: none; }
-    }
   </style>
+  <link rel="stylesheet" href="/styles/tailwind.css">
+  <link rel="stylesheet" href="/styles/career-shell.css">
+  <link rel="stylesheet" href="/styles/career-intelligence.css">
+  <script defer src="/scripts/career-shell.js"></script>
+  <script defer src="/scripts/career-assistant.js"></script>
+  <script defer src="/scripts/career-intelligence.js"></script>
+  <script defer src="/scripts/career-workspace.js"></script>
 </head>
 <body class="min-h-screen">
-  <!-- Step Navigation Bar -->
-  <nav id="stepNav" class="no-print sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100 shadow-sm">
-    <div class="max-w-6xl mx-auto px-4 py-3">
-      <div class="flex items-center justify-between mb-2">
-        <div class="flex items-center gap-2">
-          <div class="w-8 h-8 gradient-bg rounded-lg flex items-center justify-center">
-            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
-          </div>
-          <span class="font-bold text-sm gradient-text">职途星轨</span>
-        </div>
-        <div class="progress-bar flex-1 mx-4 max-w-xs">
-          <div class="fill" id="globalProgress" style="width: 0%"></div>
-        </div>
-        <span class="text-xs text-slate-400" id="progressText">0/5 步</span>
-        <button onclick="openCareerAssistant()" class="ml-3 inline-flex items-center gap-1.5 rounded-lg bg-primary-50 px-3 py-2 text-xs font-semibold text-primary-600 hover:bg-primary-100" aria-label="打开星轨答疑">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-5 4v-4z"/></svg>
-          <span class="hidden md:inline">星轨答疑</span>
-        </button>
-        <a href="career-prep.html" class="ml-2 text-xs font-semibold text-emerald-700 whitespace-nowrap">求职冲刺</a>
-      </div>
-      <div class="flex items-center gap-1 overflow-x-auto pb-1" id="stepItems">
-        <div class="step-item active" data-step="0" onclick="goToStep(0)">
-          <span class="step-num">&#8962;</span><span class="hidden sm:inline">首页</span>
-        </div>
-        <div class="text-slate-300 text-xs">&#8594;</div>
-        <div class="step-item" data-step="1" onclick="goToStep(1)">
-          <span class="step-num">1</span><span class="hidden sm:inline">方向定位</span>
-        </div>
-        <div class="text-slate-300 text-xs">&#8594;</div>
-        <div class="step-item" data-step="2" onclick="goToStep(2)">
-          <span class="step-num">2</span><span class="hidden sm:inline">软实力测评</span>
-        </div>
-        <div class="text-slate-300 text-xs">&#8594;</div>
-        <div class="step-item" data-step="3" onclick="goToStep(3)">
-          <span class="step-num">3</span><span class="hidden sm:inline">硬实力解析</span>
-        </div>
-        <div class="text-slate-300 text-xs">&#8594;</div>
-        <div class="step-item" data-step="4" onclick="goToStep(4)">
-          <span class="step-num">4</span><span class="hidden sm:inline">JD匹配</span>
-        </div>
-        <div class="text-slate-300 text-xs">&#8594;</div>
-        <div class="step-item" data-step="5" onclick="goToStep(5)">
-          <span class="step-num">5</span><span class="hidden sm:inline">综合报告</span>
-        </div>
-      </div>
-    </div>
-  </nav>
-
-  <!-- Main Content -->
   <main class="max-w-6xl mx-auto px-4 py-6">
+    <details class="career-profile-host no-print" id="careerProfileHost"><summary>统一资料</summary></details>
 
-    <!-- STEP 0: Homepage -->
-    <section id="step0" class="step-section active">
-      <section class="card p-6 md:p-8 mt-4 mb-6 no-print" aria-labelledby="p0-entry-title">
-        <p class="text-sm text-primary-600 font-semibold mb-2">从眼前的问题开始</p>
-        <h2 id="p0-entry-title" class="text-2xl md:text-3xl font-bold mb-3">你现在最想解决哪件事？</h2>
-        <p class="text-sm text-slate-500 mb-5">写一句话就能开始，没有经历也可以。资料可跨模块复用，预览并明确提交后管理员才能查看。</p>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <a href="/start?task=explore_direction" class="radio-card block"><strong>我还不知道以后做什么</strong><span class="block text-xs text-slate-500 mt-1">从专业或困惑，找到 2—3 个探索方向</span></a>
-          <a href="/start?task=build_experience" class="radio-card block"><strong>我想知道现在可以做什么</strong><span class="block text-xs text-slate-500 mt-1">整理已有经历，或尝试一个入门小任务</span></a>
-          <a href="/start?task=find_opportunity" class="radio-card block"><strong>我想找实习或工作</strong><span class="block text-xs text-slate-500 mt-1">使用经历、简历或目标岗位，确定下一步</span></a>
-          <a href="/start?task=compare_options" class="radio-card block"><strong>我在几个选择之间犹豫</strong><span class="block text-xs text-slate-500 mt-1">按共同维度比较，找出需要核实的信息</span></a>
+    <section id="step0" class="step-section">
+      <div class="career-welcome">
+        <img src="/assets/career/career-orbit.webp" alt="" width="1600" height="571" fetchpriority="high">
+        <div class="career-welcome-copy">
+          <h2>职业规划工作台</h2>
+          <p id="homeTaskStatus" hidden></p>
+        </div>
+      </div>
+      <a href="/index.html#intelligence" class="ci-home-link">
+        <span class="ci-home-mark" aria-hidden="true">✦</span>
+        <span><strong>职业规划 AI</strong><small>从你的经历出发，找出新方向、比较取舍，生成可编辑的职业路线。</small></span>
+        <span class="ci-home-arrow" aria-hidden="true">→</span>
+      </a>
+      <section class="career-workbench-section" aria-labelledby="p0-entry-title">
+        <h2 id="p0-entry-title">你现在最想解决哪件事？</h2>
+        <div class="career-task-grid">
+          <a href="/index.html#direction" class="career-task-card">
+            <span><strong>方向探索</strong><small>我不知道以后做什么</small></span>
+            <img src="/assets/career/career-explore.webp" alt="" width="360" height="360">
+            <span class="career-task-arrow" aria-hidden="true">→</span>
+          </a>
+          <a href="/index.html#ability/experience" class="career-task-card">
+            <span><strong>能力画像</strong><small>我想知道现在可以做什么</small></span>
+            <img src="/assets/career/career-skills.webp" alt="" width="360" height="360">
+            <span class="career-task-arrow" aria-hidden="true">→</span>
+          </a>
+          <a href="/index.html#jobs" class="career-task-card">
+            <span><strong>岗位匹配</strong><small>我想找实习或工作</small></span>
+            <img src="/assets/career/career-jobs.webp" alt="" width="360" height="360">
+            <span class="career-task-arrow" aria-hidden="true">→</span>
+          </a>
+          <a href="/start?task=compare_options" class="career-task-card">
+            <span><strong>方向对比</strong><small>我在几个选择之间犹豫</small></span>
+            <img src="/assets/career/career-compare.webp" alt="" width="360" height="360">
+            <span class="career-task-arrow" aria-hidden="true">→</span>
+          </a>
         </div>
       </section>
-      <div class="text-center py-12 md:py-20">
-        <div class="inline-flex items-center gap-2 bg-primary-50 text-primary-600 rounded-full px-4 py-1.5 text-sm font-medium mb-6">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-          写给正在寻找方向的你
-        </div>
-        <h1 class="text-4xl md:text-5xl font-bold tracking-tight mb-4">
-          <span class="gradient-text">职途星轨</span>
-        </h1>
-        <p class="text-lg md:text-xl text-slate-500 max-w-2xl mx-auto mb-8 leading-relaxed">
-          每条职业路径，都有自己的星轨。<br>
-          从专业、能力与经历出发，用五步看见更适合你的方向，<br class="hidden md:block">
-          把模糊的可能，连成一条可以出发的路。
-        </p>
-        <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <button id="continueTestButton" onclick="continueCurrentTest()" class="btn-primary text-lg px-10 py-4 shadow-lg">开始探索 &#8594;</button>
-          <button id="newTestHomeButton" onclick="startNewTest()" class="btn-secondary text-lg px-8 py-3.5 hidden">开始新测试</button>
-          <button onclick="openCareerAssistant()" class="btn-secondary text-lg px-8 py-3.5">先聊聊我的困惑</button>
-        </div>
+      <div class="career-workbench-section career-summary-grid">
+        <section class="career-summary-card" aria-labelledby="resume-title">
+          <h2 id="resume-title">继续上次任务</h2>
+          <p id="homeResumeSummary">还没有草稿。</p>
+          <a id="continueTestButton" class="career-text-link" href="/index.html#direction">开始方向探索 →</a>
+        </section>
+        <section class="career-summary-card" aria-labelledby="latest-title">
+          <h2 id="latest-title">最近的建议或报告</h2>
+          <p id="homeRecentSummary">还没有生成的建议或报告。</p>
+          <a id="homeRecentLink" class="career-text-link" hidden>查看结果 →</a>
+        </section>
       </div>
-      <div class="card p-6 mb-8 border border-emerald-100 bg-emerald-50/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div><span class="tag tag-accent">大三 / 大四 · 已确定方向</span><h2 class="text-xl font-bold mt-2">准备投递？开始练简历、笔试与面试</h2><p class="text-sm text-slate-500 mt-1">沿用目标岗位、经历和 JD，针对行业和岗位练习。</p></div>
-        <a href="career-prep.html" class="btn-primary text-center flex-shrink-0">进入求职冲刺 &#8594;</a>
-      </div>
+    </section>
+    <section id="step6" class="step-section">
       <section id="historySection" class="card p-6 mb-8 border border-slate-100" aria-labelledby="historyTitle">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <div>
-            <div class="flex items-center gap-2"><h2 id="historyTitle" class="text-xl font-bold">历史测试</h2><span id="historyCount" class="tag tag-primary" aria-live="polite">0 份</span></div>
+            <div class="flex items-center gap-2"><h2 id="historyTitle" class="text-xl font-bold">历史记录</h2><span id="historyCount" class="tag tag-primary" aria-live="polite">0 份</span></div>
             <p class="text-sm text-slate-500 mt-1">阶段进度与最终报告都保存在当前浏览器中，可随时继续填写或查看结果。</p>
           </div>
           <button onclick="startNewTest()" class="btn-secondary text-sm py-2 px-4 flex-shrink-0">+ 开始新测试</button>
         </div>
         <div id="historyEmpty" class="rounded-xl border-2 border-dashed border-slate-200 p-7 text-center">
-          <p class="font-semibold text-slate-600">还没有历史测试</p>
-          <p class="text-sm text-slate-400 mt-1">在任一步点击“保存进度”后，就会出现在这里。</p>
+          <p class="font-semibold text-slate-600">还没有历史记录</p>
+          <p class="text-sm text-slate-400 mt-1">保存的本地草稿和报告会出现在这里。</p>
         </div>
         <div id="historyList" class="grid grid-cols-1 lg:grid-cols-2 gap-4 hidden"></div>
       </section>
-      <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-12">
-        <div class="card p-5 text-center">
-          <div class="w-12 h-12 mx-auto mb-3 rounded-full bg-indigo-50 flex items-center justify-center">
-            <svg class="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
-          </div>
-          <h3 class="font-semibold text-sm mb-1">方向定位</h3>
-          <p class="text-xs text-slate-400">专业路径判断 + 意向排序</p>
-        </div>
-        <div class="card p-5 text-center">
-          <div class="w-12 h-12 mx-auto mb-3 rounded-full bg-violet-50 flex items-center justify-center">
-            <svg class="w-6 h-6 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-          </div>
-          <h3 class="font-semibold text-sm mb-1">软实力测评</h3>
-          <p class="text-xs text-slate-400">MBTI + 能力雷达图</p>
-        </div>
-        <div class="card p-5 text-center">
-          <div class="w-12 h-12 mx-auto mb-3 rounded-full bg-teal-50 flex items-center justify-center">
-            <svg class="w-6 h-6 text-accent-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
-          </div>
-          <h3 class="font-semibold text-sm mb-1">硬实力解析</h3>
-          <p class="text-xs text-slate-400">经历提炼与能力标签</p>
-        </div>
-        <div class="card p-5 text-center">
-          <div class="w-12 h-12 mx-auto mb-3 rounded-full bg-amber-50 flex items-center justify-center">
-            <svg class="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
-          </div>
-          <h3 class="font-semibold text-sm mb-1">JD匹配</h3>
-          <p class="text-xs text-slate-400">岗位适配度分析</p>
-        </div>
-        <div class="card p-5 text-center">
-          <div class="w-12 h-12 mx-auto mb-3 rounded-full bg-emerald-50 flex items-center justify-center">
-            <svg class="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-          </div>
-          <h3 class="font-semibold text-sm mb-1">综合报告</h3>
-          <p class="text-xs text-slate-400">汇总方向与行动计划</p>
-        </div>
+      <a class="career-text-link" href="/start#cloudHistory">查看云端任务与活动回执 →</a>
+    </section>
+    <section id="step7" class="step-section">
+      <div class="card p-6">
+        <h2 class="text-xl font-bold mb-4">发展路径建议</h2>
+        <div id="roadmapPath" class="space-y-4"></div>
       </div>
-      <div class="card p-5 max-w-3xl mx-auto mb-5 border border-primary-100 bg-primary-50/40">
-        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div class="flex items-start gap-3">
-            <div class="w-10 h-10 rounded-xl gradient-bg text-white flex items-center justify-center flex-shrink-0">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-5 4v-4z"/></svg>
-            </div>
-            <div>
-              <p class="font-semibold text-slate-800">就业知识问答不占流程步骤</p>
-              <p class="text-sm text-slate-500 mt-1">随时了解不同岗位做什么、就业去向如何，以及本专业和跨专业路径该怎么比较。</p>
-            </div>
-          </div>
-          <button onclick="openCareerAssistant()" class="btn-secondary text-sm py-2 px-4 flex-shrink-0">打开星轨答疑</button>
-        </div>
-      </div>
-      <div class="card p-5 max-w-2xl mx-auto mb-8 bg-amber-50/50 border border-amber-100">
-        <div class="flex items-start gap-3">
-          <svg class="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-          <div>
-            <p class="text-sm font-medium text-amber-800 mb-1">隐私保护提示</p>
-            <p class="text-xs text-amber-700 leading-relaxed">基本信息、测评答案、经历原文和能力分析默认仅保存在浏览器本地。使用联网岗位搜索时，仅发送意向岗位关键词与所填城市用于检索，不上传测评答案或经历内容。测评与方向建议仅供参考。</p>
-          </div>
-        </div>
-      </div>
+      <a href="/index.html#reports" class="career-text-link">查看综合报告与行动清单 →</a>
     </section>
 
-    <!-- STEP 1: Student profile and career direction ranking -->
-    <section id="step1" class="step-section">
-      <div class="mb-6 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+    <section id="step8" class="step-section ci-workspace">
+      <header class="ci-hero">
         <div>
-          <div class="inline-flex items-center rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-600 mb-3">第 1 步 · 方向定位</div>
-          <h2 class="text-2xl font-bold mb-2">先说说你现在站在哪里</h2>
-          <p class="text-slate-500 text-sm">只收集生成方向建议所需的信息。完成后，你会看到可比较、可排序的行业与岗位选项。</p>
-          <p class="text-sm mt-2"><a href="career-prep.html" class="text-emerald-700 font-semibold">方向已确定？直接练简历、笔试与面试 &#8594;</a></p>
+          <h2>从已有经历，找到下一条路</h2>
+          <p>梳理能力和生活目标，探索不同走法，再把想尝试的方向加入职业树。</p>
         </div>
-        <button id="saveStep1Button" onclick="saveProgressNow(1,this)" class="btn-secondary text-sm py-2 px-4 flex-shrink-0 no-print">保存进度</button>
+        <a class="ci-button ci-button-light" href="/trees">打开职业树 <span aria-hidden="true">↗</span></a>
+      </header>
+      <div class="ci-work-area">
+        <section class="ci-panel" aria-labelledby="ciTaskTitle">
+          <div id="ciTasks" class="ci-tasks" role="group" aria-label="规划任务"></div>
+          <form id="ciForm">
+            <h2 id="ciTaskTitle"></h2>
+            <p id="ciTaskHelp" class="ci-muted"></p>
+            <div id="ciFocusNode" class="ci-context-focus" hidden></div>
+            <div id="ciRouteInput" class="ci-route-input" hidden></div>
+            <label class="ci-label" for="ciMessage">你想讨论什么？</label>
+            <textarea id="ciMessage" name="message" rows="4" maxlength="4000" aria-describedby="ciTaskHelp" required></textarea>
+            <button id="ciExample" class="ci-link" type="button">填入示例</button>
+            <details id="ciContext" class="ci-context">
+              <summary>使用资料与查找依据</summary>
+              <p class="ci-muted">勾选后，对应的资料片段会用于本次在线分析。</p>
+              <label><input type="checkbox" id="ciUseProfile"> 参考现有资料（学历、经历、技能和偏好）</label>
+              <label><input type="checkbox" id="ciUseHistory"> 参考历史问答与已保存的规划记录</label>
+              <label><input type="checkbox" id="ciResearch"> 查找职业知识库与本次导入的资料</label>
+              <div class="ci-context-detail">
+                <label for="ciFile" class="ci-label">导入个人资料</label>
+                <input id="ciFile" type="file" accept=".pdf,.txt,.md,.csv" aria-describedby="ciFileHelp" multiple>
+                <p id="ciFileHelp" class="ci-muted">每次最多 3 份。文件在浏览器提取文字，可先核对内容。</p>
+                <div id="ciDocuments"></div>
+              </div>
+              <label><input type="checkbox" id="ciLive"> 检索实时公开信息</label>
+              <div class="ci-context-detail" id="ciSearchFields" hidden>
+                <label for="ciPublicQuery" class="ci-label">公开搜索词</label>
+                <input id="ciPublicQuery" type="text" maxlength="180" placeholder="例如：电池研发 校招 招聘要求">
+                <p class="ci-muted">搜索服务只接收这里的关键词。请填写岗位、学校或行业，省略个人信息。</p>
+              </div>
+            </details>
+            <div class="ci-form-actions">
+              <label class="ci-check"><input type="checkbox" id="ciChallenge"> 反向检验我的假设</label>
+              <button id="ciSubmit" class="ci-button ci-button-primary" type="submit"></button>
+            </div>
+            <p id="ciStatus" role="status" class="ci-status"></p>
+          </form>
+        </section>
+        <aside class="ci-panel ci-memory" aria-labelledby="ciMemoryTitle">
+          <h2 id="ciMemoryTitle">我的规划记录</h2>
+          <p class="ci-muted">手动保存有用的分析、偏好和经历，供下一次规划参考。记录保存在此浏览器。</p>
+          <form id="ciNoteForm">
+            <label class="ci-label" for="ciNote">新的经历、长期目标或生活偏好</label>
+            <textarea id="ciNote" rows="2" maxlength="1000" required></textarea>
+            <div class="ci-inline-actions">
+              <button type="submit" class="ci-button ci-button-light" value="save">保存</button>
+              <button type="submit" class="ci-link" value="discover">保存并探索新机会</button>
+            </div>
+          </form>
+          <p id="ciMemoryStatus" class="ci-status" role="status"></p>
+          <div id="ciMemoryList" class="ci-memory-list"></div>
+        </aside>
       </div>
-      <div class="card p-6 mb-6">
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div>
+      <section class="ci-panel ci-results" id="ciResults" aria-label="规划分析结果" hidden></section>
+      <dialog id="ciTreeDialog" class="ci-tree-dialog" aria-labelledby="ciTreeTitle">
+        <form id="ciTreeForm">
+          <h2 id="ciTreeTitle">确认写入职业树</h2>
+          <p class="ci-muted">勾选想保留的方向，可在写入前修改名称与说明。</p>
+          <label class="ci-label" for="ciTreeChoice">目标职业树</label>
+          <select id="ciTreeChoice"></select>
+          <label class="ci-label" for="ciTreeMode" id="ciTreeModeLabel" hidden>写入方式</label>
+          <select id="ciTreeMode" hidden><option value="add">新增分支</option><option value="update">更新一个节点</option></select>
+          <label class="ci-label" for="ciTreeNode" id="ciTreeNodeLabel" hidden></label>
+          <select id="ciTreeNode" hidden></select>
+          <div id="ciDrafts"></div>
+          <p id="ciTreeStatus" class="ci-status" role="status"></p>
+          <div class="ci-inline-actions">
+            <button class="ci-button ci-button-light" id="ciCancelTree" type="button">取消</button>
+            <button class="ci-button ci-button-primary" id="ciConfirmTree" type="submit">确认写入</button>
+          </div>
+        </form>
+      </dialog>
+    </section>
+
+    <section id="step1" class="step-section">
+      <p class="career-task-progress" data-task-progress></p>
+      <div id="directionProfile" class="card career-direction-form p-6 mb-6">
+        <div>
+          <div data-direction-question="education">
             <div class="flex items-center gap-2 mb-3">
-              <span class="w-6 h-6 rounded-full bg-primary-600 text-white text-xs font-bold flex items-center justify-center">1</span>
-              <h3 class="font-semibold">你目前是</h3>
+                <h3 class="font-semibold">你目前是</h3>
             </div>
             <div class="grid grid-cols-2 gap-3" role="group" aria-label="当前学历">
               <button type="button" class="radio-card profile-choice" data-profile-field="education" data-profile-value="undergraduate" aria-pressed="false" onclick="selectProfileValue('education','undergraduate')">
-                <span class="block font-semibold text-sm">本科生</span><span class="block text-xs text-slate-400 mt-1">以校招、实习和通用岗位为重点</span>
+                <span class="block font-semibold text-sm">本科生</span>
               </button>
               <button type="button" class="radio-card profile-choice" data-profile-field="education" data-profile-value="graduate" aria-pressed="false" onclick="selectProfileValue('education','graduate')">
-                <span class="block font-semibold text-sm">研究生</span><span class="block text-xs text-slate-400 mt-1">兼顾专业深度与研究型岗位</span>
+                <span class="block font-semibold text-sm">研究生</span>
               </button>
             </div>
           </div>
-          <div>
+          <div data-direction-question="major" hidden>
             <div class="flex items-center gap-2 mb-3">
-              <span class="w-6 h-6 rounded-full bg-primary-600 text-white text-xs font-bold flex items-center justify-center">2</span>
               <label for="majorInput" class="font-semibold">你所学的专业</label>
             </div>
             <input type="text" id="majorInput" placeholder="例如：计算机科学、汉语言文学、机械工程" oninput="updateMajor(this.value)">
-            <p class="text-xs text-slate-400 mt-2">专业仅用于匹配常见就业方向，填写具体专业名称即可。</p>
           </div>
-        </div>
-        <div class="mt-8">
+        <div data-direction-question="employment" hidden>
           <div class="flex items-center gap-2 mb-3">
-            <span class="w-6 h-6 rounded-full bg-primary-600 text-white text-xs font-bold flex items-center justify-center">3</span>
             <h3 class="font-semibold">你目前更倾向于</h3>
           </div>
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3" role="group" aria-label="就业路径倾向">
             <button type="button" class="radio-card profile-choice" data-profile-field="employmentChoice" data-profile-value="same" aria-pressed="false" onclick="selectProfileValue('employmentChoice','same')">
-              <span class="block font-semibold text-sm">本专业就业</span><span class="block text-xs text-slate-400 mt-1">优先看专业对口与延伸岗位</span>
+              <span class="block font-semibold text-sm">本专业就业</span>
             </button>
             <button type="button" class="radio-card profile-choice" data-profile-field="employmentChoice" data-profile-value="cross" aria-pressed="false" onclick="selectProfileValue('employmentChoice','cross')">
-              <span class="block font-semibold text-sm">跨专业就业</span><span class="block text-xs text-slate-400 mt-1">优先看可迁移、可入门岗位</span>
+              <span class="block font-semibold text-sm">跨专业就业</span>
             </button>
             <button type="button" class="radio-card profile-choice" data-profile-field="employmentChoice" data-profile-value="unsure" aria-pressed="false" onclick="selectProfileValue('employmentChoice','unsure')">
-              <span class="block font-semibold text-sm">还不清楚</span><span class="block text-xs text-slate-400 mt-1">同时比较对口和跨专业路径</span>
+              <span class="block font-semibold text-sm">还不清楚</span>
             </button>
           </div>
         </div>
-        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mt-7 pt-6 border-t border-slate-100">
-          <p id="profileValidation" class="text-sm text-slate-500">三项信息填完后，为你生成方向清单。</p>
-          <button onclick="generateDirectionOptions(true)" class="btn-primary flex-shrink-0">生成我的方向清单</button>
         </div>
+        <img class="career-direction-art" src="/assets/career/career-explore.webp" alt="" width="360" height="360" loading="lazy">
+        <p id="profileValidation" class="text-sm text-slate-500 mt-3" role="status"></p>
       </div>
 
       <div id="directionExplorer" class="hidden">
         <div class="mb-5 flex flex-col md:flex-row md:items-end justify-between gap-3">
           <div>
-            <div class="inline-flex items-center gap-2 mb-2"><span class="tag tag-accent">个性化清单</span><span id="directionBasis" class="text-xs text-slate-400"></span></div>
-            <h3 class="text-xl font-bold">选择并排序你想进一步了解的方向</h3>
-            <p class="text-sm text-slate-500 mt-1">请选择 3–5 个“行业 + 岗位方向”。第一名代表你最想优先验证的方向。</p>
+            <div class="inline-flex items-center gap-2 mb-2"><span id="directionBasis" class="text-xs text-slate-400"></span></div>
+            <h3 class="text-xl font-bold">排序意向方向</h3>
+            <p class="text-sm text-slate-500 mt-1">选择 3–5 个方向，把最想验证的放在第一位。</p>
           </div>
           <button onclick="openCareerAssistant()" class="btn-secondary text-sm py-2 px-4">有疑问？去星轨答疑</button>
         </div>
@@ -383,44 +316,30 @@
             <div id="directionRanking" class="space-y-3"></div>
           </aside>
         </div>
-        <div class="flex justify-end mt-6">
-          <button onclick="completeDirectionStep()" class="btn-primary">保存排序，进入软实力测评 &#8594;</button>
-        </div>
+      </div>
+      <p class="mt-4"><a href="/start?task=explore_direction" class="career-text-link">用一句话获取方向建议 →</a></p>
+      <div class="career-task-actions no-print">
+        <button id="directionBack" onclick="moveDirectionQuestion(-1)" class="btn-secondary">返回上一步</button>
+        <button id="saveStep1Button" onclick="saveProgressNow(1,this)" class="btn-secondary">保存草稿</button>
+        <button id="directionNext" onclick="moveDirectionQuestion(1)" class="btn-primary">继续 →</button>
       </div>
     </section>
 
     <!-- STEP 2: Soft Skills Assessment -->
     <section id="step2" class="step-section">
-      <div class="mb-6 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-        <div>
-          <h2 class="text-2xl font-bold mb-2">软实力测评</h2>
-          <p class="text-slate-500 text-sm">通过问卷和情景模拟，了解你的性格特质与核心能力</p>
-        </div>
-        <button id="saveStep2Button" onclick="saveProgressNow(2,this)" class="btn-secondary text-sm py-2 px-4 flex-shrink-0 no-print">保存进度</button>
-      </div>
-      <div class="flex gap-2 mb-6">
-        <button id="tabQuestionnaire" onclick="switchSoftTab('questionnaire')" class="btn-primary text-sm py-2 px-4">调查问卷</button>
-        <button id="tabScenario" onclick="switchSoftTab('scenario')" class="btn-secondary text-sm py-2 px-4">情景模拟</button>
-        <button id="tabSoftResult" onclick="switchSoftTab('result')" class="btn-secondary text-sm py-2 px-4 hidden">查看结果</button>
+      <p class="career-task-progress" data-task-progress aria-live="polite"></p>
+      <div class="career-soft-controls flex flex-wrap items-center gap-2 mb-4">
+        <button id="tabQuestionnaire" onclick="softStage('questionnaire')" class="btn-primary text-sm py-2 px-4">调查问卷</button>
+        <button id="tabScenario" onclick="softStage('scenario', nextUnansweredScenario())" class="btn-secondary text-sm py-2 px-4">情景模拟</button>
+        <button id="tabSoftResult" onclick="softStage('result')" class="btn-secondary text-sm py-2 px-4 hidden">查看结果</button>
+        <a href="/index.html#ability/experience" class="career-text-link">硬实力解析 →</a>
       </div>
       <div id="softQuestionnaire">
-        <div class="card p-5 mb-4">
-          <p class="text-sm text-slate-500 mb-1">共 25 道题，5 点量表。请根据直觉选择最符合你的选项。</p>
-          <p class="text-xs text-slate-400">1 = 非常不符合，2 = 比较不符合，3 = 不确定，4 = 比较符合，5 = 非常符合</p>
-        </div>
+        <p class="career-question-scale" id="questionnaireScale"><span><b>1</b> 非常不符合</span><span><b>3</b> 不确定</span><span><b>5</b> 非常符合</span></p>
         <div id="questionnaireContainer"></div>
-        <div class="flex justify-end mt-4">
-          <button onclick="submitQuestionnaire()" class="btn-primary">提交问卷 &#8594;</button>
-        </div>
       </div>
       <div id="softScenario" class="hidden">
-        <div class="card p-5 mb-4">
-          <p class="text-sm text-slate-500">以下 6 个职场/学习场景，请选择你最可能采取的做法。</p>
-        </div>
         <div id="scenarioContainer"></div>
-        <div class="flex justify-end mt-4">
-          <button onclick="submitScenario()" class="btn-primary">提交情景模拟 &#8594;</button>
-        </div>
       </div>
       <div id="softResult" class="hidden">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -448,71 +367,53 @@
         </div>
         <div class="card p-6 mt-6">
             <h3 class="font-bold text-lg mb-1">性格偏好的岗位参考</h3>
-            <p class="text-xs text-slate-400 mb-3">仅用于补充视角，不替代你在第 1 步选择的就业方向。</p>
+            <p class="text-xs text-slate-400 mb-3">仅用于补充视角，不替代你在方向探索中选择的就业方向。</p>
           <div id="careerSuggestions" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
         </div>
-        <div class="flex justify-between mt-6">
-          <button onclick="goToStep(1)" class="btn-secondary">&#8592; 返回</button>
-          <button onclick="goToStep(3)" class="btn-primary">下一步：硬实力解析 &#8594;</button>
-        </div>
+      </div>
+      <div class="career-task-actions no-print">
+        <button id="softBack" onclick="moveSoftAssessment(-1)" class="btn-secondary">返回首页</button>
+        <button id="saveStep2Button" onclick="saveProgressNow(2,this)" class="btn-secondary">保存草稿</button>
+        <button id="softNext" onclick="moveSoftAssessment(1)" class="btn-primary">继续 →</button>
       </div>
     </section>
 
     <!-- STEP 3: Hard Skills Analysis -->
     <section id="step3" class="step-section">
-      <div class="mb-6 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-        <div>
-          <h2 class="text-2xl font-bold mb-2">硬实力解析</h2>
-          <p class="text-slate-500 text-sm">输入你的经历，自动提取关键词、技能标签和能力量化信息</p>
-        </div>
-        <button id="saveStep3Button" onclick="saveProgressNow(3,this)" class="btn-secondary text-sm py-2 px-4 flex-shrink-0 no-print">保存进度</button>
-      </div>
+      <p class="career-task-progress" data-task-progress></p>
+      <div class="career-ability-tabs"><a href="/index.html#ability">软实力测评</a><a href="/index.html#ability/experience" aria-current="page">硬实力解析</a></div>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <div class="card p-5 mb-4">
             <h3 class="font-semibold mb-3">输入你的经历</h3>
-            <p class="text-xs text-slate-400 mb-3">支持科研、竞赛、实习、项目、校园经历等。建议按 STAR 结构（情境-任务-行动-结果）描述。</p>
-            <textarea id="experienceInput" rows="10" oninput="updateExperienceText(this.value)" placeholder="例如：&#10;【实习】在XX公司担任产品实习生&#10;负责用户调研和竞品分析&#10;独立完成5份用户访谈报告，使用Python进行数据分析&#10;产出的报告帮助团队优化了3个核心功能，用户满意度提升15%&#10;&#10;【竞赛】全国大学生创新创业大赛&#10;作为队长带领4人团队，负责项目策划和路演&#10;获得省级一等奖"></textarea>
-            <button onclick="analyzeExperience()" class="btn-primary mt-3 w-full">分析经历</button>
+            <textarea id="experienceInput" aria-label="你的项目、实习或校园经历" rows="7" oninput="updateExperienceText(this.value)" placeholder="例如：用 Python 整理 30 份访谈记录，提炼出 3 条产品改进建议。"></textarea>
+            <a href="/start?task=build_experience" class="career-text-link">导入简历或获取行动建议 →</a>
           </div>
         </div>
         <div>
           <div class="card p-5" id="hardSkillResult">
             <h3 class="font-semibold mb-3">分析结果</h3>
-            <div id="experienceResult" class="text-sm text-slate-400">
-              <p>输入经历后，这里将展示：</p>
-              <ul class="list-disc list-inside mt-2 space-y-1">
-                <li>提取的关键词与技能标签</li>
-                <li>能力维度评估</li>
-                <li>成果量化信息</li>
-                <li>STAR 结构整理</li>
-              </ul>
-            </div>
+            <div id="experienceResult" class="text-sm text-slate-500"></div>
           </div>
         </div>
       </div>
-      <div class="flex justify-between mt-6">
-        <button onclick="goToStep(2)" class="btn-secondary">&#8592; 返回</button>
-        <button onclick="goToStep(4)" class="btn-primary">下一步：JD匹配 &#8594;</button>
+      <div class="career-task-actions no-print">
+        <button onclick="goToStep(2)" class="btn-secondary">返回软实力</button>
+        <button id="saveStep3Button" onclick="saveProgressNow(3,this)" class="btn-secondary">保存草稿</button>
+        <button onclick="analyzeExperience()" class="btn-primary">分析经历</button>
       </div>
     </section>
 
     <!-- STEP 4: JD Matching -->
     <section id="step4" class="step-section">
-      <div class="mb-6 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-        <div>
-          <h2 class="text-2xl font-bold mb-2">JD 岗位匹配</h2>
-          <p class="text-slate-500 text-sm">自动寻找适合你的校招岗位，或粘贴已有 JD 做深入分析。</p>
-        </div>
-        <button id="saveStep4Button" onclick="saveProgressNow(4,this)" class="btn-secondary text-sm py-2 px-4 flex-shrink-0 no-print">保存进度</button>
-      </div>
+      <p class="career-task-progress" data-task-progress></p>
 
       <div class="card p-2 mb-6 flex gap-2" role="tablist" aria-label="JD匹配方式">
-        <button id="jdAutoTab" role="tab" aria-selected="true" onclick="switchJDMode('auto')" class="branch-tab active">
-          <span class="block">自动推荐校招岗位</span><span class="block text-xs font-normal mt-0.5">招聘平台 + 行业代表企业校招官网</span>
+        <button id="jdAutoTab" role="tab" aria-selected="true" onclick="goToStep(4, '/auto')" class="branch-tab active">
+          推荐岗位
         </button>
-        <button id="jdManualTab" role="tab" aria-selected="false" onclick="switchJDMode('manual')" class="branch-tab">
-          <span class="block">粘贴 JD 深入分析</span><span class="block text-xs font-normal mt-0.5">已有目标岗位时使用</span>
+        <button id="jdManualTab" role="tab" aria-selected="false" onclick="goToStep(4, '/manual')" class="branch-tab">
+          分析 JD
         </button>
       </div>
 
@@ -520,7 +421,7 @@
         <div class="card p-6 mb-5">
           <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-5">
             <div class="flex-1">
-              <div class="flex items-center gap-2 mb-2"><span class="tag tag-primary">基于前序结果</span><h3 class="font-bold">本次会用到的求职画像</h3></div>
+              <h3 class="font-bold">求职画像</h3>
               <div id="jobSearchProfileSummary" class="flex flex-wrap gap-2 mt-3"></div>
               <p id="jobSearchCoverage" class="text-xs text-slate-400 mt-3"></p>
             </div>
@@ -535,25 +436,23 @@
               <span id="recommendJobsBtnText">搜索并计算匹配度</span>
             </button>
           </div>
-          <div class="flex flex-wrap gap-2 mt-4 text-xs">
-            <span class="source-badge bg-indigo-50 text-indigo-600">招聘平台：BOSS直聘等</span>
-            <span class="source-badge bg-emerald-50 text-emerald-600">企业来源：对应行业代表企业校招官网</span>
-            <span class="text-slate-400 self-center">岗位会跳转到原始来源，投递前请核验发布时间与应届生要求。</span>
-          </div>
+          <details class="mt-4 text-xs text-slate-500">
+            <summary class="cursor-pointer">岗位来源与匹配说明</summary>
+            <p class="mt-2">搜索招聘平台及企业校招官网。匹配分反映材料关键词覆盖，学历门槛单独说明。投递前请核验发布时间与应届生要求。</p>
+          </details>
         </div>
 
         <div id="jobSearchLoading" class="card p-10 text-center hidden mb-5">
           <div class="loading-spinner mx-auto mb-3"></div>
           <p class="font-semibold text-sm">正在搜索真实校招岗位</p>
-          <p class="text-xs text-slate-400 mt-1">同时检索招聘平台与企业官方招聘网站，并结合你的能力计算匹配度。</p>
         </div>
         <div id="jobSearchError" class="hidden rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-600 mb-5"></div>
-        <div id="jobSearchEmpty" class="card p-10 text-center mb-5">
-          <div class="w-12 h-12 rounded-full bg-primary-50 text-primary-600 flex items-center justify-center mx-auto mb-3">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        <div id="jobSearchEmpty" class="card p-5 mb-5">
+          <div class="career-illustrated-empty">
+            <img src="/assets/career/career-jobs.webp" alt="" width="360" height="360" loading="lazy">
+            <p id="jobSearchEmptyTitle">搜索后在这里查看岗位。</p>
+            <p id="jobSearchEmptyDetail" hidden></p>
           </div>
-          <p class="font-semibold">准备好后，自动搜索与你匹配的校招岗位</p>
-          <p class="text-sm text-slate-400 mt-1">系统先按前三意向检索，再用统一资料与公开 JD 计算材料关键词覆盖；学历门槛单独说明。</p>
         </div>
         <div id="jobRecommendationResults" class="hidden">
           <div id="jobSearchOverview" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5"></div>
@@ -570,44 +469,41 @@
           <div>
             <div class="card p-5">
               <h3 class="font-semibold mb-1">目标岗位 JD</h3>
-              <p class="text-xs text-slate-400 mb-3">可以自行粘贴，也可以从自动推荐结果中选择一个岗位带入。</p>
-              <textarea id="jdInput" rows="12" oninput="updateManualJDText(this.value)" placeholder="粘贴目标岗位的招聘描述（JD），例如：&#10;&#10;岗位职责：&#10;1. 负责产品需求分析和方案设计&#10;2. 与研发团队紧密协作，推动产品上线&#10;3. 进行用户调研和数据分析&#10;&#10;任职要求：&#10;1. 本科及以上学历&#10;2. 良好的沟通能力和逻辑思维&#10;3. 熟练使用 Excel、SQL 等工具&#10;4. 有互联网实习经验优先"></textarea>
+              <textarea id="jdInput" aria-label="目标岗位 JD" rows="8" oninput="updateManualJDText(this.value)" placeholder="粘贴招聘信息中的岗位职责与任职要求"></textarea>
               <button onclick="matchJD()" class="btn-primary mt-3 w-full">开始匹配分析</button>
             </div>
           </div>
           <div>
             <div class="card p-5" id="jdMatchResult">
               <h3 class="font-semibold mb-3">匹配结果</h3>
-              <div id="matchResultContent" class="text-sm text-slate-400">
-                <p>粘贴 JD 并点击分析后，这里将展示：</p>
-                <ul class="list-disc list-inside mt-2 space-y-1">
-                  <li>整体匹配度评分</li>
-                  <li>材料中提及的关键词</li>
-                  <li>尚未体现与核实建议</li>
-                  <li>简历优化建议</li>
-                </ul>
-              </div>
+              <div id="matchResultContent" class="text-sm text-slate-500"></div>
             </div>
           </div>
         </div>
       </div>
 
-      <div class="flex justify-between mt-6">
-        <button onclick="goToStep(3)" class="btn-secondary">&#8592; 返回</button>
-        <button onclick="goToStep(5)" class="btn-primary">生成综合报告 &#8594;</button>
+      <div class="flex flex-wrap gap-4">
+        <a href="/job-search.html" class="career-text-link">按关键词独立搜索 →</a>
+        <a href="/start?task=find_opportunity" class="career-text-link">用简历或目标岗位获取求职建议 →</a>
+      </div>
+      <div class="career-task-actions no-print">
+        <button onclick="goToStep(3)" class="btn-secondary">返回能力画像</button>
+        <button id="saveStep4Button" onclick="saveProgressNow(4,this)" class="btn-secondary">保存草稿</button>
+        <button onclick="generateCurrentReport()" class="btn-primary">生成综合报告 →</button>
       </div>
     </section>
 
     <!-- STEP 5: Comprehensive Report -->
     <section id="step5" class="step-section">
+      <div id="reportEmpty" class="card p-6" hidden><h2 class="font-bold">还没有可生成报告的资料</h2><a class="career-text-link" href="/index.html#direction">开始方向探索 →</a></div>
+      <div id="reportDetails">
       <div class="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 class="text-2xl font-bold mb-2">大学生就业方向报告</h2>
           <p class="text-slate-500 text-sm">汇总你的求职画像、方向优先级、能力证据与下一步验证计划</p>
           <p id="reportSaveStatus" class="text-xs text-emerald-600 mt-2 no-print" role="status" aria-live="polite"></p>
         </div>
         <div class="flex flex-wrap gap-2 no-print">
-          <button id="saveReportButton" onclick="saveCurrentReportNow(this)" class="btn-primary text-sm py-2 px-4">更新保存</button>
+          <button id="saveReportButton" onclick="saveCurrentReportNow(this)" class="btn-primary text-sm py-2 px-4">保存报告</button>
           <button id="exportPdfButton" onclick="exportReport(this)" class="btn-secondary text-sm py-2 px-4">导出 PDF</button>
           <button onclick="window.print()" class="btn-secondary text-sm py-2 px-4">打印</button>
         </div>
@@ -691,72 +587,12 @@
         <button id="reportBackButton" onclick="goToStep(4)" class="btn-secondary">&#8592; 返回修改</button>
         <button onclick="startNewTest()" class="btn-secondary">开始新测试</button>
       </div>
+      </div>
     </section>
 
   </main>
 
   <div id="saveToast" class="save-toast hidden no-print" role="status" aria-live="polite"></div>
-
-  <!-- Global career knowledge assistant: available outside the five-step flow -->
-  <div id="assistantBackdrop" class="assistant-backdrop hidden no-print" onclick="closeCareerAssistant()"></div>
-  <aside id="assistantPanel" class="assistant-panel hidden no-print" role="dialog" aria-modal="true" aria-labelledby="assistantTitle">
-    <div class="gradient-bg text-white px-5 py-4 flex items-center justify-between flex-shrink-0">
-      <div>
-        <div class="flex items-center gap-2">
-          <span class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-5 4v-4z"/></svg>
-          </span>
-          <div><h2 id="assistantTitle" class="font-bold">星轨答疑</h2><p class="text-xs text-white/70">随时了解行业、岗位与求职路径</p></div>
-        </div>
-      </div>
-      <button onclick="closeCareerAssistant()" class="w-9 h-9 rounded-lg hover:bg-white/15 text-2xl leading-none" aria-label="关闭星轨答疑">&times;</button>
-    </div>
-
-    <div class="px-4 pt-4 flex-shrink-0">
-      <div id="assistantProfile" class="rounded-xl border border-primary-100 bg-primary-50 p-3 text-sm"></div>
-      <div class="mt-3">
-        <p class="text-xs font-semibold text-slate-500 mb-2">你可以先问</p>
-        <div id="suggestedQuestions" class="flex gap-2 overflow-x-auto pb-2"></div>
-      </div>
-    </div>
-
-    <div id="chatArea" class="assistant-chat-scroll flex-1 space-y-4 px-4 py-3">
-      <div class="flex justify-start">
-        <div class="chat-bubble chat-bot">
-          <p>你好！我可以帮你比较本专业与跨专业就业，也可以解释不同岗位的日常工作、校招要求和入门准备。</p>
-          <p class="mt-2 text-xs text-slate-400">告诉我一个专业、行业或岗位名称，我们从具体问题开始。</p>
-        </div>
-      </div>
-    </div>
-
-    <details class="mx-4 mb-3 rounded-xl border border-slate-200 bg-white flex-shrink-0">
-      <summary class="cursor-pointer px-4 py-2.5 text-xs font-semibold text-slate-500">查看或补充就业知识库</summary>
-      <div class="px-4 pb-4 max-h-64 overflow-y-auto">
-        <button onclick="toggleKBPanel()" class="text-xs text-primary-600 hover:underline mb-2">+ 添加自己的资料</button>
-        <div id="kbPanel" class="hidden mb-3">
-          <input type="text" id="kbTitle" placeholder="知识标题（如：数据分析师校招要求）" class="mb-2">
-          <textarea id="kbContent" rows="3" placeholder="粘贴课程笔记、招聘信息或访谈内容..." class="mb-2"></textarea>
-          <input type="text" id="kbTags" placeholder="标签（逗号分隔，如：数据分析,校招,岗位）" class="mb-2">
-          <input type="text" id="kbSource" placeholder="来源（如：企业招聘宣讲会）" class="mb-2">
-          <button onclick="addKnowledge()" class="btn-primary text-xs py-2 px-3">添加到知识库</button>
-        </div>
-        <div id="kbList" class="space-y-2"></div>
-      </div>
-    </details>
-
-    <div class="border-t border-slate-200 bg-white p-4 flex-shrink-0">
-      <div class="flex gap-2">
-        <input type="text" id="chatInput" placeholder="例如：产品运营每天具体做什么？" class="flex-1" onkeydown="if(event.key==='Enter')sendChat()">
-        <button onclick="sendChat()" class="btn-primary py-2 px-5">发送</button>
-      </div>
-      <p class="text-[11px] text-slate-400 mt-2">回答基于内置知识库，仅作方向探索参考，请结合最新招聘信息核实。</p>
-    </div>
-  </aside>
-
-  <button id="floatingAssistant" onclick="openCareerAssistant()" class="floating-assistant btn-primary no-print inline-flex items-center gap-2 px-5 py-3" aria-label="打开星轨答疑">
-    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-5 4v-4z"/></svg>
-    <span>星轨答疑</span>
-  </button>
 
   <footer class="no-print text-center py-6 text-xs text-slate-400 border-t border-gray-100 mt-8">
     <p>职途星轨 - 从迷茫到可验证的选择</p>
@@ -801,6 +637,7 @@
       selectedRecommendedJob: null,
       jobSearchPreferences: { location:'' },
       jobSearchMeta: null,
+      workspaceUpdates: {},
       reportGenerated: false,
       historyRecordId: null,
       lastStep: 1
@@ -817,18 +654,7 @@
     'studentProfile','directionRanking','directionSnapshots','questionnaireAnswers','scenarioAnswers',
     'mbtiResult','softSkills','experienceText','experienceAnalysis','manualJDText','jdMode',
     'jdMatchResult','recommendedJobs','selectedRecommendedJob','jobSearchPreferences','jobSearchMeta',
-    'reportGenerated','historyRecordId','lastStep'
-  ];
-
-  const defaultKB = [
-    { id:'kb1', title:'本专业就业还是跨专业就业', content:'不要只问“专业有没有前途”，而要比较两条具体路径。各选2个本专业岗位和2个跨专业岗位，从工作内容、校招门槛、已有证据、补课成本、地域与生活方式五项打分。专业对口不等于只能做一个岗位，跨专业也不等于从零开始；课程项目、研究方法、写作、数据和沟通能力都可能迁移。先用岗位访谈、小项目或实习体验验证，再决定主投方向。', tags:['本专业','跨专业','专业对口','就业方向','选择','迷茫'], source:'大学生职业探索方法库' },
-    { id:'kb2', title:'本科生与研究生求职重点有什么不同', content:'本科生通常更适合优先建立可展示的实践证据，如实习、课程项目、竞赛和作品集，并关注校招中的助理、初级与执行型岗位。研究生除实践外，还可以突出研究方法、专业深度、论文课题和复杂问题分析能力，关注研发、研究、算法、专业分析等岗位。学历不是唯一标准，最终仍要回到具体JD逐条核对。', tags:['本科','本科生','研究生','学历','校招','求职准备'], source:'高校就业指导资料整理' },
-    { id:'kb3', title:'产品、运营岗位的日常与就业去向', content:'产品岗位常做需求调研、方案设计、原型与跨团队推进，常见于互联网、软件服务、智能硬件和数字化部门；校招会看逻辑、用户意识、项目经历与表达。运营岗位常做内容、用户、活动或平台规则，通过数据复盘提升增长和留存，常见于互联网、电商、消费与文化传媒。两个方向都对专业相对开放，但需要用项目证明理解业务和推动落地。', tags:['产品经理','产品','运营','产品运营','用户运营','就业情形','岗位日常'], source:'校招岗位画像库' },
-    { id:'kb4', title:'数据分析岗位的日常与入门门槛', content:'数据分析师通常负责取数、清洗、指标分析、可视化和业务建议，常见于互联网、金融、咨询、零售、制造等行业。本科生可从Excel、SQL、统计基础和一个完整业务分析项目开始；研究生还可突出建模、研究设计和复杂数据处理。判断岗位时要分清业务分析、数据开发和算法岗位，它们的技术门槛并不相同。', tags:['数据分析','商业分析','SQL','就业情形','岗位日常','跨专业'], source:'校招岗位画像库' },
-    { id:'kb5', title:'市场、人力、客户成功等通用岗位怎么选', content:'市场岗位关注用户与品牌，常做调研、活动和内容传播；人力岗位围绕招聘、培训、员工关系与组织支持；客户成功连接产品与客户，负责使用落地、续约和问题协调。这些岗位分布在多数行业，对专业限制通常较少，但分别更看重洞察表达、沟通组织、服务意识与业务理解。选择时应同时看行业，因为同一岗位在科技、快消和制造企业中的工作方式会不同。', tags:['市场','品牌','人力资源','招聘','客户成功','通用岗位','跨专业'], source:'校招岗位画像库' },
-    { id:'kb6', title:'如何判断一个行业或岗位的就业情况', content:'不要只看“热门”标签。建议收集20条目标岗位JD，记录招聘数量、常见城市、学历专业要求、技能高频词、实习要求与起薪区间；再比较至少3类雇主和2个招聘渠道。向学长学姐确认真实工作内容与流动方向。用连续两到四周的信息样本看趋势，避免被单条高薪招聘或短期新闻误导。', tags:['就业前景','就业情况','行业','岗位','招聘','JD','调研'], source:'职业信息调研方法库' },
-    { id:'kb7', title:'两周低成本体验一个岗位', content:'第1至2天读10条JD并整理高频任务；第3至5天看从业者访谈并约一位学长学姐做20分钟信息访谈；第6至10天完成一个最小项目，如产品分析、运营方案、数据看板或行业研究简报；第11至14天请从业者反馈并复盘自己是否喜欢日常任务。体验的目标不是做得完美，而是获得继续或排除该方向的证据。', tags:['体验岗位','职业探索','信息访谈','项目','两周','迷茫'], source:'大学生职业探索方法库' },
-    { id:'kb8', title:'没有相关实习如何开始跨专业求职', content:'先把目标岗位拆成3到5项核心任务，再盘点课程、社团、科研和兼职中可迁移的证据。缺少证据的部分，用课程项目、校园真实问题或公开数据完成一个可展示的小项目。简历要解释“为什么转向、已有何种证据、正在补什么”，并优先申请实习、助理和校招初级岗位。跨专业不是广撒网，而是围绕少数目标岗位持续积累同一组证据。', tags:['没有实习','跨专业','项目','简历','入门','校招'], source:'大学生求职行动指南' }
+    'workspaceUpdates','reportGenerated','historyRecordId','lastStep'
   ];
 
   const crossDirectionCatalog = [
@@ -1040,18 +866,23 @@
   }
 
   function selectProfileValue(field, value) {
+    if (appData.studentProfile[field] === value) return;
+    workspaceChanged('direction', appData.directionRanking.length > 0);
+    if (appData.jdMatchResult || appData.jobSearchMeta) appData.workspaceUpdates.jobs = true;
     appData.studentProfile[field] = value;
     restoreProfileControls();
     markDirectionOptionsForRefresh();
-    renderAssistantProfile();
-    renderSuggestedQuestions();
+    window.refreshAssistantContext?.();
     saveToLocalStorage();
   }
 
   function updateMajor(value) {
+    if (appData.studentProfile.major === value.trim()) return;
+    workspaceChanged('direction', appData.directionRanking.length > 0);
+    if (appData.jdMatchResult || appData.jobSearchMeta) appData.workspaceUpdates.jobs = true;
     appData.studentProfile.major = value.trim();
     markDirectionOptionsForRefresh();
-    renderAssistantProfile();
+    window.refreshAssistantContext?.();
     saveToLocalStorage();
   }
 
@@ -1073,7 +904,8 @@
     if (explorer && !explorer.classList.contains('hidden')) explorer.classList.add('hidden');
     if (validation) {
       validation.className = 'text-sm text-amber-600';
-      validation.textContent = '基本信息有变化，请重新生成方向清单。已选方向会尽量保留。';
+      validation.textContent = appData.workspaceUpdates.direction || appData.workspaceUpdates.jobs || appData.workspaceUpdates.report
+        ? '资料有变化，方向清单、岗位匹配和已生成报告可能需要更新。' : '';
     }
   }
 
@@ -1158,6 +990,7 @@
       return false;
     }
     currentDirectionPool = buildDirectionPool();
+    delete appData.workspaceUpdates.direction;
     var validIds = currentDirectionPool.map(function(item) { return item.id; });
     appData.directionRanking = (appData.directionRanking || []).filter(function(id) { return validIds.indexOf(id) >= 0; }).slice(0, 5);
     invalidateJobSearchSelectionIfNeeded();
@@ -1171,8 +1004,7 @@
     if (basis) basis.textContent = educationLabel(appData.studentProfile.education) + ' · ' + appData.studentProfile.major + ' · ' + employmentChoiceLabel(appData.studentProfile.employmentChoice);
     renderDirectionCards();
     renderDirectionRanking();
-    renderAssistantProfile();
-    renderSuggestedQuestions();
+    window.refreshAssistantContext?.();
     saveToLocalStorage();
     return true;
   }
@@ -1207,7 +1039,9 @@
     invalidateJobSearchSelectionIfNeeded();
     renderDirectionCards();
     renderDirectionRanking();
-    renderSuggestedQuestions();
+    window.refreshAssistantContext?.();
+    workspaceChanged('direction');
+    if (appData.jdMatchResult || appData.jobSearchMeta) appData.workspaceUpdates.jobs = true;
     saveToLocalStorage();
   }
 
@@ -1241,26 +1075,20 @@
     invalidateJobSearchSelectionIfNeeded();
     renderDirectionCards();
     renderDirectionRanking();
-    renderSuggestedQuestions();
+    window.refreshAssistantContext?.();
+    workspaceChanged('direction');
+    if (appData.jdMatchResult || appData.jobSearchMeta) appData.workspaceUpdates.jobs = true;
     saveToLocalStorage();
   }
 
   function completeDirectionStep() {
     if (!generateDirectionOptions(true)) return;
     if (appData.directionRanking.length < 3) { alert('请至少选择并排序 3 个想进一步了解的方向。'); return; }
+    rememberWorkspaceTask();
+    saveToLocalStorage();
     goToStep(2);
   }
 
-  function initDirectionStep() {
-    restoreProfileControls();
-    if (profileIsComplete()) generateDirectionOptions(false);
-    else {
-      var explorer = document.getElementById('directionExplorer');
-      var validation = document.getElementById('profileValidation');
-      if (explorer) explorer.classList.add('hidden');
-      if (validation) validation.textContent = '';
-    }
-  }
 
   function askAboutDirection(id) {
     var item = findDirectionById(id);
@@ -1274,36 +1102,6 @@
   /* ============================================
      NAVIGATION
      ============================================ */
-  function goToStep(step) {
-    step = Math.max(0, Math.min(5, parseInt(step, 10) || 0));
-    if (historyViewMode && step === 0) { exitHistoryView(); return; }
-    if (historyViewMode && step > 0 && step < 5) { editViewedHistory(step); return; }
-    currentStep = step;
-    if (!historyViewMode && step > 0) {
-      appData.lastStep = step;
-      if (step < 5) appData.reportGenerated = false;
-    }
-    saveToLocalStorage();
-    document.querySelectorAll('.step-section').forEach(function(s, i) {
-      s.classList.toggle('active', i === step);
-    });
-    document.querySelectorAll('.step-item').forEach(function(item) {
-      var si = parseInt(item.dataset.step);
-      item.classList.remove('active','completed');
-      if (si === step) item.classList.add('active');
-      else if (si < step) item.classList.add('completed');
-    });
-    var pct = Math.round((step / 5) * 100);
-    document.getElementById('globalProgress').style.width = pct + '%';
-    document.getElementById('progressText').textContent = step + '/5 步';
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    if (step === 0) { renderHistoryList(); renderHomeState(); }
-    if (step === 1) initDirectionStep();
-    if (step === 2) initSoftSkillsStep();
-    if (step === 3) initExperienceStep();
-    if (step === 4) initJDStep();
-    if (step === 5) buildReport();
-  }
 
   /* ============================================
      LOCAL STORAGE & TEST HISTORY
@@ -1369,6 +1167,7 @@
     data.selectedRecommendedJob = isPlainObject(saved.selectedRecommendedJob) ? deepClone(saved.selectedRecommendedJob) : null;
     data.jobSearchPreferences = Object.assign({ location:'' }, isPlainObject(saved.jobSearchPreferences) ? deepClone(saved.jobSearchPreferences) : {});
     data.jobSearchMeta = isPlainObject(saved.jobSearchMeta) ? deepClone(saved.jobSearchMeta) : null;
+    data.workspaceUpdates = isPlainObject(saved.workspaceUpdates) ? saved.workspaceUpdates : {};
     data.reportGenerated = saved.reportGenerated === true;
     data.historyRecordId = typeof saved.historyRecordId === 'string' && saved.historyRecordId ? saved.historyRecordId : null;
     var lastStep = parseInt(saved.lastStep, 10);
@@ -1396,6 +1195,7 @@
     }
     try {
       localStorage.setItem(CURRENT_STORAGE_KEY, JSON.stringify(dataToSave));
+      updateWorkspaceProgress();
       return true;
     } catch(e) {
       setReportSaveStatus('当前进度未保存：浏览器本地存储空间不足或不可用。', true);
@@ -1472,6 +1272,7 @@
     snapshot.selectedRecommendedJob = compactJobForHistory(snapshot.selectedRecommendedJob);
     snapshot.historyRecordId = recordId;
     snapshot.reportGenerated = status === 'completed';
+    if (status === 'completed') delete snapshot.workspaceUpdates.report;
     var requestedStep = parseInt(options.lastStep != null ? options.lastStep : source.lastStep, 10);
     snapshot.lastStep = status === 'completed' ? 5 : Math.max(1, Math.min(4, requestedStep || 1));
     return snapshot;
@@ -1581,7 +1382,9 @@
       if (!options.silent) setReportSaveStatus('尚无可保存的测试内容，请先完成基本信息或任一测评。', true);
       return false;
     }
+    var status = options.status === 'draft' ? 'draft' : 'completed';
     var existingIndex = appData.historyRecordId ? historyRecords.findIndex(function(record){ return record.id === appData.historyRecordId; }) : -1;
+    if (status === 'draft' && historyRecords[existingIndex]?.status === 'completed') existingIndex = -1;
     if (existingIndex < 0 && historyRecords.length >= HISTORY_LIMIT) {
       setReportSaveStatus('最多保存 ' + HISTORY_LIMIT + ' 份历史测试，请先删除一份再保存。', true);
       return false;
@@ -1589,7 +1392,6 @@
     var now = new Date().toISOString();
     var recordId = existingIndex >= 0 ? historyRecords[existingIndex].id : makeHistoryId();
     var oldRecord = existingIndex >= 0 ? historyRecords[existingIndex] : null;
-    var status = options.status === 'draft' ? 'draft' : 'completed';
     var requestedStep = Math.max(1, Math.min(4, parseInt(options.step, 10) || parseInt(appData.lastStep, 10) || 1));
     var score = typeof options.overallScore === 'number' ? options.overallScore : calculateOverallScoreForData(appData);
     appData.directionSnapshots = uniqueDirections((appData.directionSnapshots || []).concat((appData.directionRanking || []).map(findDirectionById).filter(Boolean).map(normalizeDirectionSnapshot))).slice(0, 8);
@@ -1608,7 +1410,8 @@
     else nextRecords.unshift(record);
     if (!persistHistoryRecords(nextRecords, historyLegacyImported)) return false;
     appData.historyRecordId = recordId;
-    appData.reportGenerated = status === 'completed';
+    appData.reportGenerated = status === 'completed' || appData.reportGenerated;
+    if (status === 'completed') delete appData.workspaceUpdates.report;
     appData.lastStep = status === 'completed' ? 5 : requestedStep;
     saveToLocalStorage();
     renderHistoryList();
@@ -1652,7 +1455,6 @@
     var previousLastStep = appData.lastStep;
     var previousReportGenerated = appData.reportGenerated;
     appData.lastStep = step;
-    appData.reportGenerated = false;
     if (!saveToLocalStorage()) {
       appData.lastStep = previousLastStep;
       appData.reportGenerated = previousReportGenerated;
@@ -1667,7 +1469,8 @@
       return false;
     }
     flashSavedButton(button, '已保存 ✓');
-    showSaveToast('第 ' + step + ' 步进度已保存，可从首页“历史测试”继续填写。', false);
+    rememberWorkspaceTask();
+    showSaveToast('草稿已保存，可在历史记录中继续填写。', false);
     return true;
   }
 
@@ -1679,6 +1482,11 @@
     } else {
       showSaveToast(historyStorageError || '报告保存失败，请稍后重试。', true);
     }
+  }
+
+  function generateCurrentReport() {
+    goToStep(5);
+    if (hasMeaningfulTestData(appData)) saveCurrentReportNow();
   }
 
   function migrateLegacyReportOnce() {
@@ -1697,14 +1505,6 @@
     return new Intl.DateTimeFormat('zh-CN', options).format(date).replace(/\//g, '-');
   }
 
-  function renderHomeState() {
-    var continueButton = document.getElementById('continueTestButton');
-    var newButton = document.getElementById('newTestHomeButton');
-    if (!continueButton || !newButton) return;
-    var hasCurrent = hasMeaningfulTestData(appData);
-    continueButton.textContent = hasCurrent ? (appData.reportGenerated ? '查看当前测试结果 →' : '继续上次测试 →') : '开始探索 →';
-    newButton.classList.toggle('hidden', !hasCurrent);
-  }
 
   function renderHistoryList() {
     var list = document.getElementById('historyList');
@@ -1762,26 +1562,11 @@
     var record = getHistoryRecord(recordId);
     if (!record) return;
     if (record.status === 'draft') { continueHistoryRecord(recordId); return; }
-    if (!historyViewMode) historyViewReturnData = deepClone(appData);
-    var globalSource = historyViewReturnData || appData;
-    historyViewMode = true;
-    historyViewRecordId = record.id;
-    applyHistoryRecord(record, globalSource);
-    goToStep(5);
+    goToStep(5, '/' + record.id);
   }
 
   function exitHistoryView() {
-    if (!historyViewMode) { goToStep(0); return; }
-    var globalKB = deepClone(appData.knowledgeBase || []);
-    var globalChat = deepClone(appData.chatHistory || []);
-    appData = normalizeAppData(historyViewReturnData || createDefaultAppData());
-    appData.knowledgeBase = globalKB;
-    appData.chatHistory = globalChat;
-    historyViewMode = false;
-    historyViewRecordId = null;
-    historyViewReturnData = null;
-    saveToLocalStorage();
-    goToStep(0);
+    goToStep(6);
   }
 
   function editViewedHistory(step) {
@@ -1796,6 +1581,7 @@
     appData.reportGenerated = false;
     saveToLocalStorage();
     goToStep(appData.lastStep);
+    rememberWorkspaceTask();
   }
 
   function continueHistoryRecord(recordId) {
@@ -1820,6 +1606,7 @@
     appData.reportGenerated = false;
     saveToLocalStorage();
     goToStep(targetStep);
+    rememberWorkspaceTask();
   }
 
   function deleteHistoryRecord(recordId) {
@@ -1850,11 +1637,6 @@
     renderHomeState();
   }
 
-  function continueCurrentTest() {
-    if (!hasMeaningfulTestData(appData)) { goToStep(1); return; }
-    var target = appData.reportGenerated ? 5 : Math.max(1, Math.min(4, parseInt(appData.lastStep, 10) || 1));
-    goToStep(target);
-  }
 
   function startNewTest() {
     var currentData = historyViewMode && historyViewReturnData ? historyViewReturnData : appData;
@@ -1870,213 +1652,30 @@
     currentDirectionPool = [];
     currentJDMode = 'auto';
     if (!saveToLocalStorage()) return;
-    try { sessionStorage.setItem('careerPredictorStartStep', '1'); } catch(e) {}
-    location.reload();
-  }
-
-  /* ============================================
-     KNOWLEDGE BASE
-     ============================================ */
-  function toggleKBPanel() { document.getElementById('kbPanel').classList.toggle('hidden'); }
-
-  function addKnowledge() {
-    var t = document.getElementById('kbTitle').value.trim();
-    var c = document.getElementById('kbContent').value.trim();
-    var tg = document.getElementById('kbTags').value.split(',').map(function(x){return x.trim();}).filter(Boolean);
-    var sr = document.getElementById('kbSource').value.trim();
-    if (!t || !c) { alert('请填写标题和内容'); return; }
-    appData.knowledgeBase.push({ id:'kb_'+Date.now(), title:t, content:c, tags:tg, source: sr||'用户自定义' });
-    saveToLocalStorage(); renderKBList();
-    ['kbTitle','kbContent','kbTags','kbSource'].forEach(function(id){ document.getElementById(id).value=''; });
-    document.getElementById('kbPanel').classList.add('hidden');
-  }
-
-  function renderKBList() {
-    var all = defaultKB.concat(appData.knowledgeBase);
-    var list = document.getElementById('kbList');
-    if (!list) return;
-    list.innerHTML = all.map(function(kb) {
-      return '<div class="flex items-center justify-between p-2 rounded-lg bg-warm-50 hover:bg-primary-50 transition">' +
-        '<div class="flex-1 min-w-0"><p class="text-sm font-medium truncate">' + esc(kb.title) + '</p>' +
-        '<div class="flex gap-1 mt-1 flex-wrap">' + kb.tags.map(function(t){return '<span class="tag tag-primary text-xs">'+esc(t)+'</span>';}).join('') + '</div></div>' +
-        '<span class="text-xs text-slate-400 ml-2 flex-shrink-0">' + esc(kb.source) + '</span></div>';
-    }).join('');
-  }
-
-  /* ============================================
-     CHAT / RAG SIMULATION
-     ============================================ */
-  function openCareerAssistant(prefillQuestion) {
-    document.getElementById('assistantBackdrop').classList.remove('hidden');
-    document.getElementById('assistantPanel').classList.remove('hidden');
-    document.body.style.overflow = 'hidden';
-    renderAssistantProfile();
-    renderSuggestedQuestions();
-    var input = document.getElementById('chatInput');
-    if (prefillQuestion) {
-      input.value = prefillQuestion;
-      setTimeout(function(){ sendChat(); }, 80);
-    } else {
-      setTimeout(function(){ input.focus(); }, 80);
-    }
-  }
-
-  function closeCareerAssistant() {
-    document.getElementById('assistantBackdrop').classList.add('hidden');
-    document.getElementById('assistantPanel').classList.add('hidden');
-    document.body.style.overflow = '';
-  }
-
-  function goToProfileFromAssistant() {
-    closeCareerAssistant();
-    goToStep(1);
-  }
-
-  function renderAssistantProfile() {
-    var el = document.getElementById('assistantProfile');
-    if (!el) return;
-    var p = appData.studentProfile || {};
-    if (profileIsComplete()) {
-      el.innerHTML = '<div class="flex items-start justify-between gap-3"><div><p class="text-xs font-semibold text-primary-600 mb-1">回答将参考你的求职画像</p><p class="text-slate-700">' + esc(educationLabel(p.education)) + ' · ' + esc(p.major) + ' · ' + esc(employmentChoiceLabel(p.employmentChoice)) + '</p></div><button onclick="goToProfileFromAssistant()" class="text-xs text-primary-600 hover:underline flex-shrink-0">修改</button></div>';
-    } else {
-      el.innerHTML = '<div class="flex items-start justify-between gap-3"><div><p class="text-xs font-semibold text-amber-600 mb-1">尚未填写基本信息</p><p class="text-slate-600">仍可直接提问；填写学历、专业与就业倾向后，回答会更有针对性。</p></div><button onclick="goToProfileFromAssistant()" class="text-xs text-primary-600 hover:underline flex-shrink-0">去填写</button></div>';
-    }
-  }
-
-  function renderSuggestedQuestions() {
-    var container = document.getElementById('suggestedQuestions');
-    if (!container) return;
-    var choice = (appData.studentProfile || {}).employmentChoice;
-    var questions = [];
-    if (choice === 'same') {
-      questions = ['我的专业常见就业方向有哪些？','如何判断我是否适合本专业就业？','本专业岗位对本科和研究生的要求有何不同？'];
-    } else if (choice === 'cross') {
-      questions = ['哪些跨专业岗位对大学生更友好？','跨专业求职需要补哪些能力？','没有相关实习，怎样做第一个岗位项目？'];
-    } else if (choice === 'unsure') {
-      questions = ['如何比较本专业和跨专业就业？','怎样低成本体验一个岗位？','该按兴趣、能力还是就业机会选方向？'];
-    } else {
-      questions = ['如何找到适合自己的就业方向？','本专业还是跨专业，该怎么判断？','怎样了解一个岗位的真实工作？'];
-    }
-    var top = appData.directionRanking && appData.directionRanking.length ? findDirectionById(appData.directionRanking[0]) : null;
-    if (top) questions.unshift(top.direction + '的日常工作和校招要求是什么？');
-    container.innerHTML = questions.slice(0, 4).map(function(q) {
-      return '<button data-question="' + esc(q) + '" onclick="askQuestion(this.dataset.question)" class="whitespace-nowrap rounded-full bg-white border border-primary-100 px-3 py-1.5 text-xs text-primary-600 hover:bg-primary-50">' + esc(q) + '</button>';
-    }).join('');
-  }
-
-  function renderChatHistory() {
-    var area = document.getElementById('chatArea');
-    if (!area) return;
-    var welcome = '<div class="flex justify-start"><div class="chat-bubble chat-bot"><p>你好！我可以帮你比较本专业与跨专业就业，也可以解释不同岗位的日常工作、校招要求和入门准备。</p><p class="mt-2 text-xs text-slate-400">告诉我一个专业、行业或岗位名称，我们从具体问题开始。</p></div></div>';
-    area.innerHTML = welcome + appData.chatHistory.map(function(item) {
-      if (item.role === 'user') return '<div class="flex justify-end"><div class="chat-bubble chat-user">' + esc(item.content) + '</div></div>';
-      return '<div class="flex justify-start"><div class="chat-bubble chat-bot">' + item.content + '</div></div>';
-    }).join('');
-    area.scrollTop = area.scrollHeight;
-  }
-
-  function askQuestion(q) { document.getElementById('chatInput').value = q; sendChat(); }
-
-  function sendChat() {
-    var input = document.getElementById('chatInput');
-    var msg = input.value.trim();
-    if (!msg) return;
-    input.value = '';
-    var area = document.getElementById('chatArea');
-    area.innerHTML += '<div class="flex justify-end"><div class="chat-bubble chat-user">' + esc(msg) + '</div></div>';
-    area.innerHTML += '<div id="typingInd" class="flex justify-start"><div class="chat-bubble chat-bot"><div class="typing-indicator"><span></span><span></span><span></span></div></div></div>';
-    area.scrollTop = area.scrollHeight;
-    appData.chatHistory.push({ role:'user', content:msg });
-    setTimeout(function() {
-      var resp = generateRAGResponse(msg);
-      var ind = document.getElementById('typingInd');
-      if (ind) ind.remove();
-      area.innerHTML += '<div class="flex justify-start"><div class="chat-bubble chat-bot">' + resp + '</div></div>';
-      area.scrollTop = area.scrollHeight;
-      appData.chatHistory.push({ role:'bot', content:resp });
-      saveToLocalStorage();
-    }, 800 + Math.random() * 600);
-  }
-
-  function generateRAGResponse(query) {
-    var all = defaultKB.concat(appData.knowledgeBase);
-    var qLower = query.toLowerCase();
-    var mentionedDirection = allDirectionItems().find(function(item) {
-      return qLower.includes(item.direction.toLowerCase()) || item.jobs.some(function(job){ return qLower.includes(job.toLowerCase()); });
-    });
-    var p = appData.studentProfile || {};
-    var profileNote = profileIsComplete() ? '<div class="rounded-lg bg-primary-50 p-2.5 text-xs text-primary-700 mb-2">结合你的情况：' + esc(educationLabel(p.education)) + ' · ' + esc(p.major) + ' · ' + esc(employmentChoiceLabel(p.employmentChoice)) + '</div>' : '';
-    if (mentionedDirection) {
-      var workSummary = getDirectionWorkSummary(mentionedDirection);
-      var majorLimit = mentionedDirection.route.indexOf('跨专业') >= 0 ? '通常更看重能力证据而非唯一专业背景，但仍要逐条核对具体JD。' : '专业背景通常能形成起点优势，但课程成绩不能替代项目、实习或作品证据。';
-      return profileNote + '<p>你问到的方向是 <strong>' + esc(mentionedDirection.industry + '｜' + mentionedDirection.direction) + '</strong>。</p>' +
-        '<p class="mt-2"><strong>日常工作：</strong>' + esc(workSummary) + '</p>' +
-        '<p class="mt-2"><strong>常见岗位：</strong>' + esc(mentionedDirection.jobs.join('、')) + '</p>' +
-        '<p class="mt-2"><strong>校招入门：</strong>重点准备 ' + esc(mentionedDirection.skills.join('、')) + '，并用至少一个可讲清过程与结果的项目证明。</p>' +
-        '<p class="mt-2"><strong>专业限制：</strong>' + esc(majorLimit) + '</p>' +
-        '<p class="mt-2"><strong>就业去向：</strong>可优先查看 ' + esc(mentionedDirection.industry) + ' 中的校招、实习与助理岗位，比较不同企业对同一岗位的要求。</p>' +
-        '<div class="knowledge-source"><strong>下一步：</strong>收集 10 条真实JD，找 1 位学长学姐做信息访谈，再完成一个两周最小项目。</div>';
-    }
-    var contextTerms = profileIsComplete() ? ' ' + p.major + ' ' + employmentChoiceLabel(p.employmentChoice) + ' ' + educationLabel(p.education) : '';
-    var searchText = qLower + contextTerms.toLowerCase();
-    var scores = all.map(function(kb) {
-      var score = 0;
-      kb.tags.forEach(function(kw) { if (searchText.includes(kw.toLowerCase())) score += 5; });
-      if (searchText.includes(kb.title.toLowerCase())) score += 8;
-      kb.content.split('').forEach(function(ch, i) {
-        if (i < kb.content.length - 1) {
-          var bigram = kb.content.substring(i, i+2);
-          if (qLower.includes(bigram)) score += 0.2;
-        }
-      });
-      return { kb: kb, score: score };
-    });
-    scores.sort(function(a,b){ return b.score - a.score; });
-    var topMatch = scores[0];
-    var empathy = '';
-    if (qLower.includes('迷茫') || qLower.includes('不知道')) empathy = '我理解你现在的感受，迷茫其实是自我探索的开始，说明你在认真思考自己的未来。';
-    else if (qLower.includes('焦虑') || qLower.includes('紧张') || qLower.includes('害怕')) empathy = '你的感受完全可以理解，面对未知的紧张是人类的本能反应，重要的是学会和它相处。';
-    else if (qLower.includes('失败') || qLower.includes('受挫')) empathy = '遇到挫折确实让人沮丧，但每一次经历都是成长的养分，你已经迈出了很重要的一步。';
-    else if (qLower.includes('跨专业')) empathy = '跨专业求职并不等于从零开始，关键是找到可迁移能力并补足目标岗位所需的证据。';
-    else if (qLower.includes('简历') || qLower.includes('求职')) empathy = '求职阶段确实需要很多准备工作，但好的准备会让你事半功倍。';
-    else empathy = '感谢你的提问，这是一个很好的问题。';
-
-    if (topMatch && topMatch.score > 2) {
-      var kb = topMatch.kb;
-      return profileNote + '<p>' + empathy + '</p>' +
-        '<p class="mt-2 font-medium">根据知识库的分析：</p>' +
-        '<p class="mt-1">' + esc(kb.content) + '</p>' +
-        '<div class="knowledge-source"><strong>参考来源：</strong>' + esc(kb.title) + ' - ' + esc(kb.source) + '</div>' +
-        '<p class="mt-2 text-xs text-slate-400">以上用于方向探索。具体专业限制、招聘数量和城市分布，请以近期真实JD与学校就业信息为准。</p>';
-    }
-    return profileNote + '<p>' + empathy + '</p>' +
-      '<p class="mt-2">关于你的问题，知识库中暂无直接匹配的内容，但我可以提供一些通用建议：</p>' +
-      '<p class="mt-1">1. 把问题改写成一个具体行业或岗位；<br>2. 收集至少 10 条校招JD，记录高频任务和门槛；<br>3. 找一位学长学姐做 20 分钟信息访谈；<br>4. 用一到两周做一个最小项目，记录喜欢与不喜欢的任务。</p>' +
-      '<p class="mt-2 text-xs text-slate-400">你也可以直接问“某岗位每天做什么”或“本专业与跨专业如何比较”。</p>';
-  }
-
-  function getDirectionWorkSummary(item) {
-    var text = item.direction + item.jobs.join('');
-    if (/软件|算法|嵌入式|硬件/.test(text)) return '围绕需求进行开发、调试、测试和技术协作，持续阅读文档并解决具体问题。';
-    if (/产品|用户研究/.test(text)) return '调研用户与业务需求，整理方案或原型，协调设计和研发推进，并根据反馈迭代。';
-    if (/运营/.test(text)) return '策划并执行内容、用户或活动方案，跟踪关键数据，复盘并优化增长与留存。';
-    if (/数据|商业|经营|分析/.test(text)) return '整理数据与业务问题，完成指标分析、可视化和报告，将发现转化为可执行建议。';
-    if (/市场|品牌|传播|公关/.test(text)) return '开展市场调研、内容传播与活动执行，协同渠道并评估传播和转化效果。';
-    if (/研发|实验|临床|检测/.test(text)) return '按照专业规范开展实验、研究或检测，记录与分析结果，并输出可追溯的报告。';
-    if (/设计|视觉|体验|视频/.test(text)) return '理解目标用户与场景，产出设计方案或内容资产，接受反馈并持续迭代作品。';
-    if (/人力|招聘/.test(text)) return '支持招聘、培训或员工服务，维护流程与信息，并与候选人和业务团队沟通。';
-    if (/客户|商务|外贸/.test(text)) return '理解客户需求，推进方案、交付或合作流程，维护关系并跟进业务结果。';
-    return '围绕专业任务进行资料分析、项目协作、方案执行与结果复盘，具体职责会随行业和企业而变化。';
+    try { localStorage.removeItem('careerWorkspaceRecent'); } catch(e) {}
+    goToStep(1, '/education');
   }
 
   /* ============================================
      SOFT SKILLS - QUESTIONNAIRE
      ============================================ */
-  function initSoftSkillsStep() {
-    renderQuestionnaire();
-    renderScenarios();
-    switchSoftTab('questionnaire');
-    document.getElementById('tabSoftResult').classList.toggle('hidden', !appData.mbtiResult);
+  function nextUnansweredScenario() {
+    const index = scenarioData.findIndex(item => !Object.hasOwn(appData.scenarioAnswers, item.id));
+    return index < 0 ? 0 : index;
+  }
+
+  function initSoftSkillsStep(detail, position) {
+    softTab = detail === 'scenario' ? 'scenario' :
+      appData.mbtiResult && (detail === 'result' || (!detail && !appData.workspaceUpdates.soft)) ? 'result' : 'questionnaire';
+    if (softTab === 'scenario') {
+      const requested = parseInt(position, 10);
+      softQuestion = Number.isFinite(requested) ? Math.min(scenarioData.length - 1, Math.max(0, requested - 1)) : nextUnansweredScenario();
+      renderScenarios();
+    } else if (softTab === 'questionnaire') {
+      renderQuestionnaire();
+    }
+    if (softTab === 'result') showSoftResult();
+    else switchSoftTab(softTab);
   }
 
   function switchSoftTab(tab) {
@@ -2090,25 +1689,28 @@
 
   function renderQuestionnaire() {
     var container = document.getElementById('questionnaireContainer');
+    var labels = ['非常不符合','比较不符合','不确定','比较符合','非常符合'];
     container.innerHTML = questionnaireData.map(function(q) {
       var saved = appData.questionnaireAnswers[q.id] || 0;
-      return '<div class="card p-4 mb-3">' +
-        '<p class="text-sm font-medium mb-3">' + q.id + '. ' + esc(q.text) + '</p>' +
-        '<div class="flex gap-2 flex-wrap">' +
+      return '<div class="card career-question" id="soft-question-' + q.id + '" role="group" aria-labelledby="question-label-' + q.id + '">' +
+        '<p id="question-label-' + q.id + '"><span class="career-question-number">' + q.id + '.</span> ' + esc(q.text) + '</p>' +
+        '<div class="career-question-options">' +
         [1,2,3,4,5].map(function(v) {
-          var labels = ['非常不符合','比较不符合','不确定','比较符合','非常符合'];
-          var sel = saved === v ? 'selected' : '';
-          return '<div class="radio-card ' + sel + '" onclick="selectAnswer(' + q.id + ',' + v + ',this)" data-val="' + v + '">' +
-            '<span class="text-xs font-medium">' + v + '</span><br><span class="text-xs text-slate-400">' + labels[v-1] + '</span></div>';
+          var selected = saved === v;
+          var label = v + ' ' + labels[v-1];
+          return '<button type="button" aria-label="' + label + '" title="' + label + '" aria-pressed="' + selected +
+            '" class="radio-card' + (selected ? ' selected' : '') + '" onclick="selectAnswer(' + q.id + ',' + v + ',this)" data-val="' + v + '">' + v + '</button>';
         }).join('') + '</div></div>';
     }).join('');
   }
 
   function selectAnswer(qid, val, el) {
+    if (appData.questionnaireAnswers[qid] !== val) workspaceChanged('soft', Boolean(appData.mbtiResult));
     appData.questionnaireAnswers[qid] = val;
     var parent = el.parentElement;
-    parent.querySelectorAll('.radio-card').forEach(function(c){ c.classList.remove('selected'); });
+    parent.querySelectorAll('.radio-card').forEach(function(c){ c.classList.remove('selected'); c.setAttribute('aria-pressed','false'); });
     el.classList.add('selected');
+    el.setAttribute('aria-pressed','true');
     saveToLocalStorage();
   }
 
@@ -2117,7 +1719,11 @@
     if (answered < 20) { alert('请至少回答 20 道题（当前 ' + answered + '/25）。你的认真作答会让结果更准确。'); return; }
     calculateMBTI();
     calculateSoftSkills();
-    showSoftResult();
+    delete appData.workspaceUpdates.soft;
+    if (appData.jdMatchResult || appData.jobSearchMeta) appData.workspaceUpdates.jobs = true;
+    if (appData.reportGenerated) appData.workspaceUpdates.report = true;
+    saveToLocalStorage();
+    softStage('result');
   }
 
   function calculateMBTI() {
@@ -2177,22 +1783,24 @@
     var container = document.getElementById('scenarioContainer');
     container.innerHTML = scenarioData.map(function(sc, si) {
       var saved = appData.scenarioAnswers[sc.id];
-      return '<div class="card p-5 mb-4">' +
+      return '<div class="card p-5 mb-4"' + (si === softQuestion ? '' : ' hidden') + '>' +
         '<h4 class="font-semibold text-sm mb-1">场景 ' + (si+1) + '：' + esc(sc.title) + '</h4>' +
         '<p class="text-sm text-slate-500 mb-3">' + esc(sc.desc) + '</p>' +
         '<div class="space-y-2">' + sc.options.map(function(opt, oi) {
           var sel = saved === oi ? 'selected' : '';
-          return '<div class="scenario-card ' + sel + '" onclick="selectScenario(\'' + sc.id + '\',' + oi + ',this)">' +
-            '<span class="text-sm">' + esc(opt.text) + '</span></div>';
+          return '<button type="button" aria-pressed="' + Boolean(sel) + '" class="scenario-card ' + sel + '" onclick="selectScenario(\'' + sc.id + '\',' + oi + ',this)">' +
+            '<span class="text-sm">' + esc(opt.text) + '</span></button>';
         }).join('') + '</div></div>';
     }).join('');
   }
 
   function selectScenario(sid, idx, el) {
+    if (appData.scenarioAnswers[sid] !== idx) workspaceChanged('soft', Boolean(appData.mbtiResult));
     appData.scenarioAnswers[sid] = idx;
     var parent = el.parentElement;
-    parent.querySelectorAll('.scenario-card').forEach(function(c){ c.classList.remove('selected'); });
+    parent.querySelectorAll('.scenario-card').forEach(function(c){ c.classList.remove('selected'); c.setAttribute('aria-pressed','false'); });
     el.classList.add('selected');
+    el.setAttribute('aria-pressed','true');
     saveToLocalStorage();
   }
 
@@ -2201,7 +1809,11 @@
     if (answered < 4) { alert('请至少回答 4 个场景（当前 ' + answered + '/6）。'); return; }
     if (!appData.mbtiResult) calculateMBTI();
     calculateSoftSkills();
-    showSoftResult();
+    delete appData.workspaceUpdates.soft;
+    if (appData.jdMatchResult || appData.jobSearchMeta) appData.workspaceUpdates.jobs = true;
+    if (appData.reportGenerated) appData.workspaceUpdates.report = true;
+    saveToLocalStorage();
+    softStage('result');
   }
 
   function showSoftResult() {
@@ -2252,12 +1864,14 @@
      HARD SKILLS ANALYSIS
      ============================================ */
   function emptyExperienceResultHTML() {
-    return '<p>输入经历后，这里将展示：</p><ul class="list-disc list-inside mt-2 space-y-1"><li>提取的关键词与技能标签</li><li>能力维度评估</li><li>成果量化信息</li><li>STAR 结构整理</li></ul>';
+    return '<div class="career-illustrated-empty"><img src="/assets/career/career-skills.webp" alt="" width="360" height="360" loading="lazy"><p>分析后查看技能与成果。</p></div>';
   }
 
   function updateExperienceText(value) {
     value = typeof value === 'string' ? value : '';
     if (appData.experienceText === value) return;
+    workspaceChanged('hard', Boolean(appData.experienceAnalysis));
+    if (appData.jdMatchResult || appData.jobSearchMeta) appData.workspaceUpdates.jobs = true;
     appData.experienceText = value;
     if (appData.experienceAnalysis) {
       appData.experienceAnalysis = null;
@@ -2281,6 +1895,8 @@
     appData.experienceText = text;
     var result = extractSkills(text);
     appData.experienceAnalysis = result;
+    delete appData.workspaceUpdates.hard;
+    rememberWorkspaceTask();
     saveToLocalStorage();
     renderExperienceResult(result);
   }
@@ -2366,7 +1982,7 @@
      JD MATCHING
      ============================================ */
   function emptyJDResultHTML() {
-    return '<p>粘贴 JD 并点击“开始匹配”后，这里将展示：</p><ul class="list-disc list-inside mt-2 space-y-1"><li>整体匹配度</li><li>材料中提及的关键词</li><li>尚未体现与核实建议</li><li>简历优化建议</li></ul>';
+    return '<div class="career-illustrated-empty"><img src="/assets/career/career-jobs.webp" alt="" width="360" height="360" loading="lazy"><p>分析后查看匹配证据与差距。</p></div>';
   }
 
   function refreshManualJDScoring() {
@@ -2415,6 +2031,7 @@
   function updateManualJDText(value) {
     value = typeof value === 'string' ? value : '';
     if (appData.manualJDText === value) return;
+    workspaceChanged('jobs', Boolean(appData.jdMatchResult));
     appData.manualJDText = value;
     if (appData.jdMatchResult && appData.jdMatchResult.source === 'manual') {
       appData.jdMatchResult = null;
@@ -2425,6 +2042,7 @@
   }
 
   function updateJobSearchLocation(value) {
+    workspaceChanged('jobs', Boolean(appData.jobSearchMeta));
     appData.jobSearchPreferences.location = value.trim();
     invalidateJobSearchSelectionIfNeeded();
     saveToLocalStorage();
@@ -2604,10 +2222,12 @@
   }
 
   async function searchRecommendedJobs() {
+    rememberWorkspaceTask();
+    const workingData = appData;
     var errorEl = document.getElementById('jobSearchError');
     var directions = getJobSearchDirections();
     if (!profileIsComplete() || directions.length === 0) {
-      errorEl.innerHTML = '<p class="font-medium">请先完成第 1 步的基本信息与至少一个方向排序。</p><button onclick="goToStep(1)" class="mt-2 text-xs underline">返回方向定位</button>';
+      errorEl.innerHTML = '<p class="font-medium">请先在方向探索中填写基本信息与至少一个方向排序。</p><button onclick="goToStep(1)" class="mt-2 text-xs underline">去方向探索</button>';
       errorEl.classList.remove('hidden');
       return;
     }
@@ -2635,6 +2255,7 @@
         })
       });
       var data = await response.json().catch(function(){ return {}; });
+      if (appData !== workingData || getJobSearchQueryKey() !== queryKey) return;
       if (!response.ok || !data.success) {
         var requestError = new Error(data.error || '搜索服务暂时不可用');
         requestError.status = response.status;
@@ -2666,15 +2287,20 @@
           cached:Boolean(data.cached)
         };
       }
+      delete appData.workspaceUpdates.jobs;
+      if (appData.reportGenerated) appData.workspaceUpdates.report = true;
       saveToLocalStorage();
       renderRecommendedJobs();
     } catch(error) {
+      if (appData !== workingData || getJobSearchQueryKey() !== queryKey) return;
       var reasonCode = error.code || (error.name === 'AbortError' ? 'SEARCH_TIMEOUT' : error.status === 429 ? 'SEARCH_RATE_LIMITED' : 'SEARCH_UNAVAILABLE');
       var reasonText = error.name === 'AbortError' ? '实时检索超时。' : error.status === 429 ? error.message + ' ' : '当前无法连接实时招聘数据源。';
       clearStaleRecommendedSelection(queryKey);
       clearRecommendedSelection();
       appData.recommendedJobs = [];
       appData.jobSearchMeta = buildGuidedSearchFallback(reasonCode, reasonText + '已先为你生成个性化校招搜索方案；以下是岗位类型和检索入口，不是正在招聘的职位。');
+      delete appData.workspaceUpdates.jobs;
+      if (appData.reportGenerated) appData.workspaceUpdates.report = true;
       saveToLocalStorage();
       renderRecommendedJobs();
     } finally {
@@ -2825,13 +2451,15 @@
         (capabilities.length ? '<div class="mt-4"><p class="text-xs font-semibold text-slate-500 mb-2">方向常见能力关键词（不是具体 JD 要求）</p><div class="flex flex-wrap gap-1.5">' + capabilities.map(function(skill){ return '<span class="tag tag-success">' + esc(skill) + '</span>'; }).join('') + '</div></div>' : '') +
         '<div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-4"><div class="rounded-lg bg-emerald-50 p-3"><p class="text-xs font-semibold text-emerald-700 mb-2">为什么先搜索这个方向</p>' + basis.map(function(item){ return '<p class="text-xs text-emerald-700 mt-1">&#10003; ' + esc(item) + '</p>'; }).join('') + '</div><div class="rounded-lg bg-amber-50 p-3"><p class="text-xs font-semibold text-amber-700 mb-2">打开职位后请核验</p>' + checklist.map(function(item){ return '<p class="text-xs text-amber-700 mt-1">&#8226; ' + esc(item) + '</p>'; }).join('') + '</div></div>' +
         '<div class="mt-4"><p class="text-xs font-semibold text-slate-500 mb-2">复制后到招聘平台搜索</p><div class="space-y-2">' + queries.map(function(query){ return '<div class="flex flex-col sm:flex-row sm:items-center gap-2 rounded-lg border border-slate-200 bg-warm-50 p-3"><code class="text-xs text-slate-600 flex-1 break-all">' + esc(query) + '</code><button data-query="' + escAttr(query) + '" onclick="copyJobSearchQuery(this)" class="btn-secondary text-xs py-2 px-3 flex-shrink-0">复制搜索词</button></div>'; }).join('') + '</div></div>' +
-        '<div class="mt-4"><p class="text-xs font-semibold text-slate-500 mb-2">招聘入口</p><div class="flex flex-wrap gap-2"><a href="' + esc(platformUrl) + '" target="_blank" rel="noopener noreferrer" class="btn-primary text-xs py-2 px-3">打开 BOSS 校园招聘 &#8599;</a>' + officialLinks + '<button onclick="switchJDMode(\'manual\')" class="btn-secondary text-xs py-2 px-3">找到岗位后粘贴 JD</button></div></div></article>';
+        '<div class="mt-4"><p class="text-xs font-semibold text-slate-500 mb-2">招聘入口</p><div class="flex flex-wrap gap-2"><a href="' + esc(platformUrl) + '" target="_blank" rel="noopener noreferrer" class="btn-primary text-xs py-2 px-3">打开 BOSS 校园招聘 &#8599;</a>' + officialLinks + '<button onclick="goToStep(4, \'/manual\')" class="btn-secondary text-xs py-2 px-3">找到岗位后粘贴 JD</button></div></div></article>';
     }).join('');
   }
 
   function renderRecommendedJobs() {
     var jobs = appData.recommendedJobs || [];
     var empty = document.getElementById('jobSearchEmpty');
+    var emptyTitle = document.getElementById('jobSearchEmptyTitle');
+    var emptyDetail = document.getElementById('jobSearchEmptyDetail');
     var results = document.getElementById('jobRecommendationResults');
     var meta = appData.jobSearchMeta || {};
     var sortButton = document.getElementById('sortRecommendedJobsBtn');
@@ -2839,9 +2467,8 @@
       showJobSearchNotice('求职方向、基本信息或城市已经变化，请重新搜索以生成对应结果。', 'warning');
       results.classList.add('hidden');
       empty.classList.remove('hidden');
-      empty.querySelector('p.font-semibold').textContent = '搜索条件已变化';
-      var changedDetail = empty.querySelector('p.text-sm');
-      if (changedDetail) changedDetail.textContent = '请点击“搜索并计算匹配度”，刷新当前方向与城市对应的结果。';
+      emptyTitle.textContent = '搜索条件已变化';
+      emptyDetail.hidden = true;
       return;
     }
     if (meta.mode === 'guided' && Array.isArray(meta.guides) && meta.guides.length) {
@@ -2854,11 +2481,9 @@
       sortButton.classList.add('hidden');
       empty.classList.remove('hidden');
       results.classList.add('hidden');
-      empty.querySelector('p.font-semibold').textContent = '暂未检索到可展示的校招岗位';
-      var emptyDetail = empty.querySelector('p.text-sm');
-      var emptyMeta = appData.jobSearchMeta || {};
-      var emptyFailures = (emptyMeta.sourceStatus || {}).failedSearches || 0;
-      if (emptyDetail) emptyDetail.textContent = emptyFailures > 0 ? '检索已完成，但部分来源失败且其余来源暂无结果；可以稍后重试或改用“粘贴 JD”。' : '检索已完成，但当前关键词下暂无结果；可以调整城市、方向排序后重试。';
+      emptyTitle.textContent = appData.jobSearchMeta ? '暂未找到校招岗位' : '搜索后在这里查看岗位。';
+      emptyDetail.hidden = !appData.jobSearchMeta;
+      emptyDetail.textContent = meta.sourceStatus?.failedSearches > 0 ? '部分来源暂不可用，可重试或分析 JD。' : '可调整城市或意向后重试。';
       return;
     }
     sortButton.classList.remove('hidden');
@@ -2928,6 +2553,7 @@
     if (!job) return;
     appData.selectedRecommendedJob = job;
     appData.jdMatchResult = buildRecommendedJDResult(job);
+    workspaceChanged('jobs');
     saveToLocalStorage();
     renderRecommendedJobs();
   }
@@ -2938,7 +2564,9 @@
     appData.manualJDText = job.description || job.snippet || '';
     document.getElementById('jdInput').value = appData.manualJDText;
     selectRecommendedJob(index);
-    switchJDMode('manual');
+    goToStep(4, '/manual');
+    rememberWorkspaceTask();
+    saveToLocalStorage();
     document.getElementById('jdInput').focus();
     document.getElementById('jdManualBranch').scrollIntoView({ behavior:'smooth', block:'start' });
   }
@@ -2956,6 +2584,8 @@
     });
     appData.selectedRecommendedJob = null;
     appData.jdMatchResult = result;
+    delete appData.workspaceUpdates.jobs;
+    workspaceChanged('jobs');
     saveToLocalStorage();
     renderJDResult(result);
     if (appData.recommendedJobs && appData.recommendedJobs.length > 0) renderRecommendedJobs();
@@ -2999,9 +2629,27 @@
     }
   }
 
+  function developmentPath(rankedDirections, targetDirection, targetSkills) {
+    var topThreeNames = rankedDirections.slice(0,3).map(function(item){ return item.direction; }).join('、') || targetDirection;
+    return [
+      { phase:'现在—2周', action:'围绕 ' + topThreeNames + ' 各收集 10 条JD，并至少完成 1 次学长学姐信息访谈，先排除不喜欢的日常任务', color:'#4F46E5' },
+      { phase:'1—3个月', action:'为第一意向“' + targetDirection + '”补充 ' + targetSkills + '，完成一个可展示、可复盘的最小项目', color:'#7C3AED' },
+      { phase:'3—6个月', action:'用实习、科研、竞赛或校园真实项目积累岗位证据，并根据投递反馈调整第一意向与备选方向', color:'#14B8A6' }
+    ].map(function(p) {
+      return '<div class="flex gap-3"><div class="w-3 h-3 rounded-full mt-1 flex-shrink-0" style="background:' + p.color + '"></div><div><p class="text-sm font-medium">' + p.phase + '</p><p class="text-xs text-slate-500">' + esc(p.action) + '</p></div></div>';
+    }).join('');
+  }
+
+  function renderRoadmap() {
+    const ranked = appData.directionRanking.map(findDirectionById).filter(Boolean);
+    const first = ranked[0];
+    document.getElementById('roadmapPath').innerHTML = first
+      ? developmentPath(ranked, first.direction, first.skills.join('、'))
+      : '<p class="text-sm text-slate-500">在方向探索中加入职业意向后，这里会显示对应的发展路径。</p><a class="career-text-link" href="/index.html#direction">去方向探索 →</a>';
+  }
+
   function buildReport() {
-    refreshManualJDScoring();
-    if (!historyViewMode && hasMeaningfulTestData(appData)) appData.reportGenerated = true;
+    if (!historyViewMode) refreshManualJDScoring();
     var mbti = appData.mbtiResult;
     var skills = appData.softSkills || {};
     var exp = appData.experienceAnalysis;
@@ -3044,7 +2692,7 @@
         '<div class="flex-1 min-w-0"><div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1"><div><p class="text-xs text-slate-400">' + esc(item.industry) + '</p><p class="font-semibold">' + esc(item.direction) + '</p></div><span class="tag tag-accent self-start">' + esc(item.route) + '</span></div>' +
         '<div class="flex flex-wrap gap-1.5 mt-2">' + item.jobs.map(function(job){ return '<span class="tag tag-primary">' + esc(job) + '</span>'; }).join('') + '</div>' +
         '<p class="text-xs text-slate-400 mt-2">' + (rankedDirections.length ? '来自你的主动选择，建议按此顺序做岗位验证。' : '尚未完成方向排序，当前仅显示性格偏好参考。') + '</p></div></div>';
-    }).join('') : '<div class="rounded-xl border-2 border-dashed border-slate-200 p-6 text-center"><p class="text-sm font-medium text-slate-600">还没有可展示的方向</p><p class="text-xs text-slate-400 mt-1">请先完成第 1 步的基本信息与方向排序。</p><button onclick="goToStep(1)" class="btn-secondary text-sm py-2 px-4 mt-3 no-print">去做方向定位</button></div>';
+    }).join('') : '<div class="rounded-xl border-2 border-dashed border-slate-200 p-6 text-center"><p class="text-sm font-medium text-slate-600">还没有可展示的方向</p><p class="text-xs text-slate-400 mt-1">请先在方向探索中填写基本信息与方向排序。</p><button onclick="goToStep(1)" class="btn-secondary text-sm py-2 px-4 mt-3 no-print">去做方向定位</button></div>';
     renderReportRadar();
     var strengthsEl = document.getElementById('reportStrengths');
     var weaknessesEl = document.getElementById('reportWeaknesses');
@@ -3056,17 +2704,9 @@
     weaknessesEl.innerHTML = sortedSkills.length ? sortedSkills.slice(-3).reverse().map(function(s) {
       return '<div class="flex items-center gap-2"><span class="tag tag-warn">' + skillLabels[s.key] + '</span><span class="text-xs text-slate-500">' + s.val + '/100</span></div>';
     }).join('') : '<p class="text-xs text-slate-400">完成软实力测评后显示。</p>';
-    var devPath = document.getElementById('devPath');
     var targetDirection = primaryDirection ? primaryDirection.direction : (desc && desc.careers[0] ? desc.careers[0] : '目标岗位');
     var targetSkills = primaryDirection ? primaryDirection.skills.join('、') : '目标岗位核心能力';
-    var topThreeNames = rankedDirections.slice(0,3).map(function(item){ return item.direction; }).join('、') || targetDirection;
-    devPath.innerHTML = [
-      { phase:'现在—2周', action:'围绕 ' + topThreeNames + ' 各收集 10 条JD，并至少完成 1 次学长学姐信息访谈，先排除不喜欢的日常任务', color:'#4F46E5' },
-      { phase:'1—3个月', action:'为第一意向“' + targetDirection + '”补充 ' + targetSkills + '，完成一个可展示、可复盘的最小项目', color:'#7C3AED' },
-      { phase:'3—6个月', action:'用实习、科研、竞赛或校园真实项目积累岗位证据，并根据投递反馈调整第一意向与备选方向', color:'#14B8A6' }
-    ].map(function(p) {
-      return '<div class="flex gap-3"><div class="w-3 h-3 rounded-full mt-1 flex-shrink-0" style="background:' + p.color + '"></div><div><p class="text-sm font-medium">' + p.phase + '</p><p class="text-xs text-slate-500">' + p.action + '</p></div></div>';
-    }).join('');
+    document.getElementById('devPath').innerHTML = developmentPath(rankedDirections, targetDirection, targetSkills);
     var actionEl = document.getElementById('actionItems');
     var actions = [
       '收集并对比 10—20 条“' + targetDirection + '”校招JD',
@@ -3094,7 +2734,11 @@
       (jd && typeof jd.matchScore === 'number' && jd.matchScore < 50 ? '<p>- 当前材料与目标 JD 对应的关键词较少，可先补充真实依据、核实关键要求。</p>' : '') +
       '<p class="mt-2 pt-2 border-t border-amber-200">- 本报告仅供职业探索参考，不构成职业承诺或心理诊断；旧测评可保存在本机；启用统一资料后，相关资料按告知保存到服务端，明确提交后管理员才可见。联网岗位搜索发送岗位关键词与城市。</p>';
     updateHistoryViewUI();
-    if (!historyViewMode) saveCurrentReportToHistory({ overallScore:overallScore });
+    if (!historyViewMode) {
+      const savedReport = getHistoryRecord(appData.historyRecordId);
+      setReportSaveStatus(appData.workspaceUpdates.report ? '资料有变化。保存报告可更新历史中的结果。' :
+        savedReport?.status === 'completed' ? '已保存 · ' + formatHistoryDate(savedReport.updatedAt, true) : '', false);
+    }
   }
 
   function renderReportRadar() {
@@ -3229,7 +2873,10 @@
       if (document.getElementById('matchResultContent')) renderJDResult(appData.jdMatchResult);
     }
     if (document.getElementById('recommendedJobList')) renderRecommendedJobs();
-    if (document.getElementById('step5').classList.contains('active')) buildReport();
+    if (currentStep === 1) showDirectionQuestion(readWorkspaceRoute().detail);
+    if (currentStep === 4) renderJobSearchProfile();
+    if (currentStep === 5 && hasMeaningfulTestData(appData)) buildReport();
+    updateWorkspaceProgress();
   });
 
   /* ============================================
@@ -3241,20 +2888,11 @@
     migrateLegacyReportOnce();
     renderHistoryList();
     renderHomeState();
-    renderKBList();
+    window.refreshAssistantContext?.();
     restoreProfileControls();
-    renderAssistantProfile();
-    renderSuggestedQuestions();
-    renderChatHistory();
-    document.addEventListener('keydown', function(event) {
-      if (event.key === 'Escape' && !document.getElementById('assistantPanel').classList.contains('hidden')) closeCareerAssistant();
-    });
-    try {
-      if (sessionStorage.getItem('careerPredictorStartStep') === '1') {
-        sessionStorage.removeItem('careerPredictorStartStep');
-        goToStep(1);
-      }
-    } catch(e) {}
+    window.refreshAssistantContext?.();
+    window.refreshAssistantContext?.();
+    initializeWorkspace();
   });
 
   /* ============================================

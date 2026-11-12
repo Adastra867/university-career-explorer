@@ -133,14 +133,21 @@ function showRoute(path, { initial = false } = {}) {
     }
     currentTree = entry;
     store = new GraphStore(library.scopedStorage(entry.id), saveStatus);
-    focus = store.ui.focused || store.ui.selected.at(-1) || graph().rootNodeId;
+    const linkedNode = nodeById(new URLSearchParams(location.hash.slice(1)).get('node'));
+    focus = linkedNode?.id || store.ui.focused || store.ui.selected.at(-1) || graph().rootNodeId;
     if (!nodeById(focus)) focus = graph().rootNodeId;
+    if (linkedNode) {
+      const parents = new Set(paths(focus).flatMap(path => path.nodeIds.slice(0, -1)));
+      store.ui.selected = [focus];
+      store.ui.collapsed = store.ui.collapsed.filter(id => !parents.has(id));
+    }
     messages = structuredClone(store.ui.chat || []);
     $('app').hidden = false; $('app').inert = false; entered = true; store.ui.entered = true;
     initExtensions(); conversationMigrated = enhancedAI?.activate(messages) ?? false; clearMigratedChatCopies(); render();
     if (graph().nodes.length === 1 && graph().viewport.x === 0 && graph().viewport.y === 0) resetViewport();
     showMobile(false); persistConversation(); store.schedule();
-    $('nodes').querySelector('.node-main')?.focus({ preventScroll: true });
+    if (linkedNode) centerNode(focus);
+    ($('nodes').querySelector('.node.focus .node-main') || $('nodes').querySelector('.node-main'))?.focus({ preventScroll: true });
   } else {
     $('intro').hidden = false; $('intro').inert = false; document.title = '始于足下 · 从一个点开始'; if (!initial) star.focus({ preventScroll: true });
   }
@@ -427,7 +434,59 @@ function renderDetail() {
     const removeBranch = document.createElement('button'); removeBranch.className = 'btn ghost'; removeBranch.id = 'deleteSubtree'; removeBranch.textContent = '删除整条分支…';
     removeBranch.onclick = () => deleteSubtree(node.id); area.append(removeBranch);
   }
+  decorateCareerIntelligence(area, node);
   extensions?.decorateNode(node);
+}
+
+function decorateCareerIntelligence(area, node) {
+  const metadata = node.attributes?.careerIntelligence;
+  const branch = metadata?.version === 1 ? metadata.branch : null;
+  const contextLink = currentTree?.type === 'career' && !node.private
+    ? `<div class="detail-actions"><a class="btn small" href="/index.html#intelligence/tree/${encodeURIComponent(currentTree.id)}/${encodeURIComponent(node.id)}">在星轨 AI 探索后续方向 ↗</a></div>` : '';
+  if (!branch) {
+    area.insertAdjacentHTML('beforeend', contextLink);
+    return;
+  }
+  const confidence = { low: '低', medium: '中', high: '高' };
+  const detailRows = [
+    ['推荐依据', branch.reason], ['发展目标', branch.goal], ['当前起点', branch.startingPoint],
+    ['已有优势', branch.advantages], ['能力差距', branch.skillGaps], ['专业知识', branch.knowledge],
+    ['证书与学历', branch.credentials], ['实践项目', branch.practice], ['主要风险', branch.risks],
+    ['时间成本', branch.timeCost], ['经济成本', branch.economicCost], ['机会成本', branch.opportunityCost],
+    ['转向灵活性', branch.flexibility], ['如何验证', branch.verification], ['下一步', branch.nextActions],
+    ['建议把握', typeof branch.confidence === 'string' && Object.hasOwn(confidence, branch.confidence) ? confidence[branch.confidence] : ''],
+  ].flatMap(([label, value]) => {
+    const display = Array.isArray(value) ? value.filter(item => typeof item === 'string').join(' · ') : value;
+    return typeof display === 'string' && display ? [`<p><b>${label}</b>　${esc(display)}</p>`] : [];
+  });
+  const stages = Array.isArray(branch.stages) ? branch.stages : [];
+  const stageNames = { near: '近期', mid: '中期', long: '远期' };
+  const stageRows = stages.filter(stage => typeof stage?.title === 'string' && Object.hasOwn(stageNames, stage.timeframe)).map(stage =>
+    `<p><b>${stageNames[stage.timeframe]} · ${esc(stage.title)}</b>　${esc(Array.isArray(stage.actions) ? stage.actions.filter(action => typeof action === 'string').join(' · ') : '')}</p>`);
+  const evidence = Array.isArray(metadata.evidence) ? metadata.evidence : [];
+  const verificationLabels = {
+    official_snapshot_checked: '官方资料快照', official_snapshot_stale: '官方快照待更新',
+    official_search_excerpt_unverified: '搜索摘要待核实', user_provided_unverified: '个人提供资料',
+  };
+  const sources = evidence.filter(source => typeof source?.title === 'string').map(source => {
+    let href;
+    try {
+      const url = new URL(source.url);
+      if (['http:', 'https:'].includes(url.protocol) && !url.username && !url.password) href = url.href;
+    } catch { /* Sources without links can still be named. */ }
+    const verification = typeof source.verificationStatus === 'string' && Object.hasOwn(verificationLabels, source.verificationStatus) ? verificationLabels[source.verificationStatus] : '';
+    const stamp = [verification, typeof source.checkedAt === 'string' ? source.checkedAt.slice(0, 10) : ''].filter(Boolean).join(' · ');
+    return `<p>${href ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(source.title)} ↗</a>` : esc(source.title)}${stamp ? ` · ${esc(stamp)}` : ''}</p>`;
+  });
+  const previous = Array.isArray(metadata.previous) ? metadata.previous.slice(0, 6) : [];
+  const turnIds = [metadata.turnId, ...previous.map(turn => turn?.turnId)].filter(id => typeof id === 'string' && id);
+  const historyLinks = [...new Set(turnIds)].map((id, index) =>
+    `<a class="btn small" href="/index.html#intelligence/turn/${encodeURIComponent(id.toWellFormed())}">${index ? `查看较早的问答 ${index}` : '查看关联问答'} ↗</a>`);
+  area.insertAdjacentHTML('beforeend', `<section class="detail-block"><strong>星轨 AI 建议</strong>
+    ${detailRows.join('')}${stageRows.join('')}
+    ${sources.length ? `<details><summary>参考来源</summary>${sources.join('')}</details>` : ''}
+    <details><summary>关联问答</summary>${typeof metadata.question === 'string' && metadata.question ? `<p>${esc(metadata.question)}</p>` : ''}${typeof metadata.summary === 'string' && metadata.summary ? `<p>${esc(metadata.summary)}</p>` : ''}
+    <div class="detail-actions">${historyLinks.join('')}</div></details>${contextLink}</section>`);
 }
 async function deleteSubtree(id) {
   if (id === graph().rootNodeId || !nodeById(id)) return;
@@ -475,7 +534,16 @@ function renderSelection() {
   const selected = selectedIds(), box = $('comparison');
   box.classList.toggle('open', selected.length > 1);
   if (selected.length < 2) { box.innerHTML = ''; return; }
-  box.innerHTML = `<div class="compare-title"><span>⇄ 已选 ${selected.length} 个节点 · 保留不同路线</span><div class="selection-actions"><button class="btn small primary" id="askCompare">请 AI 比较</button><button class="btn small" id="savePaths">保存路线</button><button class="btn small ghost" id="clearSelection">取消选择</button></div></div><div class="comparison-content">${selected.map(id => { const route = paths(id)[0]; const reqs = route ? graph().edges.filter(e => route.edgeIds.includes(e.id)).flatMap(e => e.requirements.map(r => r.label)) : []; return `<div class="path-card">${esc(route ? pathText(route) : `${nodeById(id).title}（暂无完整根路径）`)}<br>已有条件注释：${esc(reqs.join('、') || '尚未填写，可点击连线补充')}</div>`; }).join('')}</div>`;
+  const canCompareInCareer = currentTree?.type === 'career' && selected.length <= 5 && selected.every(id => !nodeById(id).private);
+  const careerLink = canCompareInCareer
+    ? `<a class="btn small" id="compareInCareerIntelligence" href="/index.html#intelligence/compare-tree/${encodeURIComponent(currentTree.id)}/${selected.map(id => encodeURIComponent(id)).join(',')}">在星轨 AI 比较 ↗</a>` : '';
+  box.innerHTML = `<div class="compare-title"><span>⇄ 已选 ${selected.length} 个节点 · 保留不同路线</span><div class="selection-actions">${careerLink}<button class="btn small primary" id="askCompare">请 AI 比较</button><button class="btn small" id="savePaths">保存路线</button><button class="btn small ghost" id="clearSelection">取消选择</button></div></div><div class="comparison-content">${selected.map(id => { const route = paths(id)[0]; const reqs = route ? graph().edges.filter(e => route.edgeIds.includes(e.id)).flatMap(e => e.requirements.map(r => r.label)) : []; return `<div class="path-card">${esc(route ? pathText(route) : `${nodeById(id).title}（暂无完整根路径）`)}<br>已有条件注释：${esc(reqs.join('、') || '尚未填写，可点击连线补充')}</div>`; }).join('')}</div>`;
+  $('compareInCareerIntelligence')?.addEventListener('click', event => {
+    persistConversation();
+    if (store.save()) return;
+    event.preventDefault();
+    toast('请先解决职业树的保存问题，再比较这些路线。');
+  });
   $('clearSelection').onclick = () => { store.ui.selected = []; multi = false; render(); store.schedule(); };
   $('savePaths').onclick = saveSelectedPaths;
   $('askCompare').onclick = () => { activeTab = 'chat'; $('scope').value = 'selection'; renderPanel(); showMobile(true); sendAI('请比较我选中的路线，说明共同准备、差异与仍待核实的问题。'); };

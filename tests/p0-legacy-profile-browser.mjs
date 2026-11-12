@@ -25,10 +25,12 @@ try {
   assert.equal(await page.locator('#majorInput').inputValue(),'测试能源专业');
   assert.match(await page.locator('#experienceInput').inputValue(),/会一点 Python/);
   assert.equal(await page.locator('#p0-entry-title').textContent(),'你现在最想解决哪件事？');
-  assert.equal(await page.locator('a[href^="/start?task="]').count(),4);
+  assert.equal(await page.locator('.career-task-card').count(),4);
   await fit();result.checks.push('390px homepage, four tasks and canonical cloud fields');
 
-  await page.evaluate(()=>goToStep(1));
+  await page.goto(origin+'/index.html#direction/major');
+  await page.reload();
+  await page.waitForFunction(()=>window.CareerProfile?.profile);
   const saved=page.waitForResponse(response=>response.url().endsWith('/api/me/profile')&&response.request().method()==='PATCH');
   await page.locator('#majorInput').fill('测试材料专业');
   assert.ok((await saved).ok());
@@ -61,6 +63,17 @@ try {
   await page.evaluate(()=>window.CareerProfile.refresh());
   assert.equal(await page.locator('#resume').inputValue(),'');
   result.checks.push('explicit shared-field clearing reaches preparation');
+
+  await page.goto(origin+'/index.html#direction/major');
+  await page.waitForFunction(()=>window.CareerProfile?.profile);
+  await page.locator('#majorInput').fill('切换页面后同步测试专业');
+  await page.locator('.career-more').click();
+  await page.locator('.career-mobile-link[data-career-nav="sprint"]').click();
+  await page.waitForFunction(()=>window.CareerProfile?.profile?.fields?.['education.major']?.value==='切换页面后同步测试专业');
+  await page.goBack();
+  await page.locator('#majorInput').waitFor();
+  assert.equal(await page.locator('#majorInput').inputValue(),'切换页面后同步测试专业');
+  result.checks.push('shared-profile edit survives navigation before the save timer');
   assert.deepEqual(result.errors,[]);
 } finally {
   // Only the synthetic identity created by this test is deleted.
