@@ -62,6 +62,39 @@ test('direct API: consent, owner isolation, CSRF, admin boundaries and private d
   assert.equal((await s.other.call('GET',`/admin/campaigns/${s.campaign.id}/qr.svg`)).status,404);
 });
 
+test('online AI profile consent is separate from storage consent and resolves only the authenticated owner', async t => {
+  const { a, b, router, store, client } = await setup(t);
+  const before = (await a.call('GET', '/me/profile')).body;
+  assert.equal(before.ai_profile_consent, undefined);
+  assert.equal((await a.call('POST', '/me/profile/ai-consent', { consent:true, notice_version:'p0-v1' })).status, 400);
+  assert.equal((await a.call('POST', '/me/profile/ai-consent', {
+    consent:true, notice_version:'career-ai-profile-v1',
+  }, { 'X-CSRF-Token':'forged' })).status, 403);
+  const enabled = await a.call('POST', '/me/profile/ai-consent', {
+    consent:true, notice_version:'career-ai-profile-v1',
+  });
+  assert.equal(enabled.status, 200);
+  assert.equal(enabled.body.ai_profile_consent.granted, true);
+  assert.deepEqual(enabled.body.fields, before.fields);
+  assert.equal((await b.call('GET', '/me/profile')).body.ai_profile_consent, undefined);
+  const cookie = enabled.headers.get('set-cookie');
+  assert.equal(cookie, null, 'Granting model access reuses the existing guest identity');
+  const count = store.get('SELECT COUNT(*) AS count FROM guests').count;
+  assert.deepEqual(router.locals.resolveProfile({headers:{}}), {
+    authenticated:false,consent:false,profile:null,source:'sqlite',status:'not_connected',
+  });
+  assert.equal(router.locals.resolveProfile({headers:{cookie:'career_guest=expired'}}).status, 'session_expired');
+  assert.equal(store.get('SELECT COUNT(*) AS count FROM guests').count, count);
+  const isolated = client();
+  assert.equal((await isolated.call('POST','/guest-session',{existing_only:true})).status,401);
+  assert.equal(store.get('SELECT COUNT(*) AS count FROM guests').count, count);
+  const revoked = await a.call('POST', '/me/profile/ai-consent', {
+    consent:false, notice_version:'career-ai-profile-v1',
+  });
+  assert.equal(revoked.body.ai_profile_consent.granted, false);
+  assert.deepEqual(revoked.body.fields, before.fields);
+});
+
 test('preview binds confirmation metadata; confirmation is field-specific; stale results cannot be submitted',async t=>{
   const s=await setup(t);
   let p=(await s.a.call('GET','/me/profile')).body;
@@ -77,6 +110,17 @@ test('preview binds confirmation metadata; confirmation is field-specific; stale
   assert.equal((await s.a.call('POST',`/intakes/${i.id}/submission-preview`,{})).body.error.code,'RESULT_STALE');
   assert.equal((await s.a.call('PATCH','/me/profile',{expected_revision:0,patch:[{field_path:'education.major',value:'x'}]})).status,409);
   assert.equal((await s.a.call('PATCH','/me/profile',{expected_revision:3,patch:[{field_path:'admin',value:'true'}]})).status,400);
+});
+
+test('an explicit clear is recorded even when only a legacy browser profile had a value',async t=>{
+  const {a}=await setup(t);
+  const profile=(await a.call('GET','/me/profile')).body;
+  const saved=await a.call('PATCH','/me/profile',{expected_revision:profile.profile_revision,patch:[{field_path:'education.major',value:null}]});
+  assert.equal(saved.status,200);
+  const field=(await a.call('GET','/me/profile')).body.fields['education.major'];
+  assert.equal(field.value,null);
+  assert.equal(field.source_type,'user_form');
+  assert.equal(field.confirmation_state,'corrected');
 });
 
 test('immutable snapshots, durable SQLite and idempotent receipt after closure/draft edits',async t=>{

@@ -9,9 +9,6 @@
   <script defer src="/p0/profile-adapter.js"></script>
   <script src="/vendor/chart.umd.js"></script>
   <script async src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" integrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.cn">
-  <link rel="preconnect" href="https://fonts.gstatic.cn" crossorigin>
-  <link href="https://fonts.googleapis.cn/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; }
     body { background: #FAFAF9; color: #1E293B; font-family: 'Inter', -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif; }
@@ -88,6 +85,7 @@
   <link rel="stylesheet" href="/styles/career-intelligence.css">
   <script defer src="/scripts/career-shell.js"></script>
   <script defer src="/scripts/career-assistant.js"></script>
+  <script defer src="/scripts/career-chat-store.js"></script>
   <script defer src="/scripts/career-intelligence.js"></script>
   <script defer src="/scripts/career-workspace.js"></script>
 </head>
@@ -171,84 +169,159 @@
       <a href="/index.html#reports" class="career-text-link">查看综合报告与行动清单 →</a>
     </section>
 
-    <section id="step8" class="step-section ci-workspace">
-      <header class="ci-hero">
-        <div>
-          <h2>从已有经历，找到下一条路</h2>
-          <p>梳理能力和生活目标，探索不同走法，再把想尝试的方向加入职业树。</p>
+    <section id="step8" class="step-section ci-workspace" aria-label="职业规划 AI">
+      <svg class="ci-icon-definitions" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>
+        <symbol id="ci-icon-orbit" viewBox="0 0 24 24"><path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z"/><path d="M19 3v4m-2-2h4M5 16v5m-2-2.5h4"/></symbol>
+        <symbol id="ci-icon-chat" viewBox="0 0 24 24"><path d="M20 14a3 3 0 0 1-3 3H9l-5 4V6a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3Z"/><path d="M8 8h8M8 12h5"/></symbol>
+        <symbol id="ci-icon-record" viewBox="0 0 24 24"><rect x="5" y="3" width="15" height="18" rx="2"/><path d="M3 7h4M3 12h4M3 17h4M10 8h6m-6 4h6m-6 4h4"/></symbol>
+        <symbol id="ci-icon-profile" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a7 7 0 0 1 7-7h2a7 7 0 0 1 7 7v2"/></symbol>
+        <symbol id="ci-icon-direction" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m16 8-2.5 5.5L8 16l2.5-5.5L16 8Z"/></symbol>
+        <symbol id="ci-icon-path" viewBox="0 0 24 24"><circle cx="5" cy="19" r="2"/><circle cx="19" cy="5" r="2"/><path d="M5 17v-5a3 3 0 0 1 3-3h8a3 3 0 0 0 3-3M9 19h7a3 3 0 0 0 0-6h-4"/></symbol>
+        <symbol id="ci-icon-compare" viewBox="0 0 24 24"><path d="M12 3v18M4 7h16M4 7l-3 7h6L4 7Zm16 0-3 7h6l-3-7ZM8 21h8"/></symbol>
+        <symbol id="ci-icon-growth" viewBox="0 0 24 24"><path d="M5 20v-5m7 5V9m7 11V3M3 10l6-5 5 2 7-5"/></symbol>
+        <symbol id="ci-icon-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+        <symbol id="ci-icon-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16M5.5 8h1m-1 4h1"/></symbol>
+        <symbol id="ci-icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+        <symbol id="ci-icon-attach" viewBox="0 0 24 24"><path d="m8 13 7-7a3 3 0 0 1 4 4L9 20a5 5 0 0 1-7-7L13 2"/></symbol>
+        <symbol id="ci-icon-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></symbol>
+        <symbol id="ci-icon-send" viewBox="0 0 24 24"><path d="M12 20V4m-6 6 6-6 6 6"/></symbol>
+        <symbol id="ci-icon-settings" viewBox="0 0 24 24"><path d="M4 7h16M4 17h16"/><circle cx="8" cy="7" r="3"/><circle cx="16" cy="17" r="3"/></symbol>
+        <symbol id="ci-icon-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></symbol>
+        <symbol id="ci-icon-upload" viewBox="0 0 24 24"><path d="M12 16V3m-5 5 5-5 5 5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></symbol>
+      </defs></svg>
+      <button id="ciSidebarBackdrop" class="ci-sidebar-backdrop" type="button" aria-label="关闭对话记录" hidden></button>
+      <aside id="ciSidebar" class="ci-sidebar" aria-label="对话记录">
+        <div class="ci-sidebar-brand">
+          <h2>对话记录</h2>
+          <button id="ciSidebarClose" class="ci-icon-button ci-sidebar-close" type="button" aria-label="关闭对话记录"><svg class="ci-icon" aria-hidden="true"><use href="#ci-icon-close"/></svg></button>
         </div>
-        <a class="ci-button ci-button-light" href="/trees">打开职业树 <span aria-hidden="true">↗</span></a>
-      </header>
-      <div class="ci-work-area">
-        <section class="ci-panel" aria-labelledby="ciTaskTitle">
-          <div id="ciTasks" class="ci-tasks" role="group" aria-label="规划任务"></div>
-          <form id="ciForm">
-            <h2 id="ciTaskTitle"></h2>
-            <p id="ciTaskHelp" class="ci-muted"></p>
+        <button id="ciNewChat" class="ci-button ci-button-primary ci-new-chat" type="button"><svg class="ci-icon" aria-hidden="true"><use href="#ci-icon-plus"/></svg><span>新建对话</span></button>
+        <div class="ci-navigation" role="group" aria-label="对话工具">
+          <button id="ciShowAssistant" type="button"><svg class="ci-icon" aria-hidden="true"><use href="#ci-icon-chat"/></svg><span>当前对话</span></button>
+          <button id="ciShowRecords" type="button"><svg class="ci-icon" aria-hidden="true"><use href="#ci-icon-record"/></svg><span>我的规划记录</span></button>
+          <button id="ciShowProfile" type="button"><svg class="ci-icon" aria-hidden="true"><use href="#ci-icon-profile"/></svg><span>补充个人资料</span></button>
+        </div>
+        <div class="ci-recent-heading"><h2>最近对话</h2><span class="ci-local-indicator">本机保存</span></div>
+        <label class="ci-session-search"><svg class="ci-icon" aria-hidden="true"><use href="#ci-icon-search"/></svg><input id="ciSessionSearch" type="search" placeholder="搜索对话" aria-label="搜索最近对话" autocomplete="off"></label>
+        <div id="ciSessions" class="ci-sessions" aria-label="最近对话列表"></div>
+        <div class="ci-sidebar-footer">
+          <button id="ciShowSettings" type="button"><svg class="ci-icon" aria-hidden="true"><use href="#ci-icon-settings"/></svg><span>资料与分析设置</span></button>
+        </div>
+      </aside>
+      <div id="ciChatMain" class="ci-chat-main">
+        <header class="ci-chat-header">
+          <button id="ciSidebarToggle" class="ci-icon-button" type="button" aria-label="折叠或展开对话记录" aria-controls="ciSidebar" aria-expanded="true"><svg class="ci-icon" aria-hidden="true"><use href="#ci-icon-panel"/></svg></button>
+          <h2 id="ciChatTitle" tabindex="-1">新对话</h2>
+          <span id="ciTaskIndicator" class="ci-task-indicator" hidden></span>
+          <button id="ciHeaderNewChat" class="ci-icon-button" type="button" aria-label="新建对话"><svg class="ci-icon" aria-hidden="true"><use href="#ci-icon-plus"/></svg></button>
+        </header>
+        <div id="ciThread" class="ci-thread" tabindex="0" aria-label="对话内容">
+          <section id="ciWelcome" class="ci-welcome" aria-labelledby="ciWelcomeTitle">
+            <div class="ci-welcome-heading">
+              <span class="ci-welcome-mark" aria-hidden="true"><svg class="ci-icon"><use href="#ci-icon-orbit"/></svg></span>
+              <h2 id="ciWelcomeTitle">今天想规划什么？</h2>
+              <p>从你的经历与兴趣出发，一起探索下一步。</p>
+            </div>
+            <section class="ci-suggestions-section" aria-labelledby="ciSuggestionsTitle">
+              <h3 id="ciSuggestionsTitle">你可以这样开始</h3>
+              <div id="ciSuggestions" class="ci-suggestions">
+                <button type="button" data-ci-prompt="profile"><svg class="ci-icon" aria-hidden="true"><use href="#ci-icon-profile"/></svg><strong>梳理个人画像</strong><span>基于我的经历与能力，梳理优势与待提升点。</span><svg class="ci-icon ci-suggestion-arrow" aria-hidden="true"><use href="#ci-icon-arrow"/></svg></button>
+                <button type="button" data-ci-prompt="explore"><svg class="ci-icon" aria-hidden="true"><use href="#ci-icon-direction"/></svg><strong>发现发展方向</strong><span>结合我的兴趣与背景，探索适合的职业方向。</span><svg class="ci-icon ci-suggestion-arrow" aria-hidden="true"><use href="#ci-icon-arrow"/></svg></button>
+                <button type="button" data-ci-prompt="plan"><svg class="ci-icon" aria-hidden="true"><use href="#ci-icon-path"/></svg><strong>制定成长路线</strong><span>为我的目标方向，规划阶段性成长路径。</span><svg class="ci-icon ci-suggestion-arrow" aria-hidden="true"><use href="#ci-icon-arrow"/></svg></button>
+                <button type="button" data-ci-prompt="compare"><svg class="ci-icon" aria-hidden="true"><use href="#ci-icon-compare"/></svg><strong>比较不同选择</strong><span>对比多个方向或机会，分析优劣与适配度。</span><svg class="ci-icon ci-suggestion-arrow" aria-hidden="true"><use href="#ci-icon-arrow"/></svg></button>
+                <button type="button" data-ci-prompt="growth"><svg class="ci-icon" aria-hidden="true"><use href="#ci-icon-growth"/></svg><strong>获得成长建议</strong><span>根据我的现状与目标，给出具体可执行的建议。</span><svg class="ci-icon ci-suggestion-arrow" aria-hidden="true"><use href="#ci-icon-arrow"/></svg></button>
+              </div>
+            </section>
+            <div class="ci-quick-links">
+              <button id="ciQuickUpload" type="button"><svg class="ci-icon" aria-hidden="true"><use href="#ci-icon-upload"/></svg><span><strong>上传个人资料</strong><small>上传我的简历、项目经历或学习材料，让 AI 帮我分析</small></span><svg class="ci-icon" aria-hidden="true"><use href="#ci-icon-arrow"/></svg></button>
+              <button id="ciContinuePlan" type="button"><svg class="ci-icon" aria-hidden="true"><use href="#ci-icon-record"/></svg><span><strong>继续我的规划</strong><small>使用我已有的规划记录，继续完善或调整我的方案</small></span><svg class="ci-icon" aria-hidden="true"><use href="#ci-icon-arrow"/></svg></button>
+            </div>
+          </section>
+          <div id="ciMessages" class="ci-messages" role="log" aria-live="polite" aria-relevant="additions text"><section id="ciResults" class="ci-results" aria-label="规划分析结果" hidden></section></div>
+        </div>
+        <div id="ciComposeArea" class="ci-compose-area">
+          <section id="ciProfileConnection" class="ci-profile-connection" aria-label="个人资料引用">
+            <div><strong id="ciProfileConnectionTitle">正在读取个人资料…</strong><p id="ciProfileConnectionHelp"></p></div>
+            <button id="ciProfileUse" class="ci-link" type="button" disabled>授权并使用</button>
+          </section>
+          <form id="ciForm" class="ci-composer">
+            <h2 id="ciTaskTitle" class="ci-sr-only">与职业规划 AI 对话</h2>
+            <p id="ciTaskHelp" class="ci-sr-only">输入你的经历、目标或困惑。Enter 发送，Shift + Enter 换行。</p>
             <div id="ciFocusNode" class="ci-context-focus" hidden></div>
             <div id="ciRouteInput" class="ci-route-input" hidden></div>
-            <label class="ci-label" for="ciMessage">你想讨论什么？</label>
-            <textarea id="ciMessage" name="message" rows="4" maxlength="4000" aria-describedby="ciTaskHelp" required></textarea>
-            <button id="ciExample" class="ci-link" type="button">填入示例</button>
-            <details id="ciContext" class="ci-context">
-              <summary>使用资料与查找依据</summary>
-              <p class="ci-muted">勾选后，对应的资料片段会用于本次在线分析。</p>
-              <label><input type="checkbox" id="ciUseProfile"> 参考现有资料（学历、经历、技能和偏好）</label>
-              <label><input type="checkbox" id="ciUseHistory"> 参考历史问答与已保存的规划记录</label>
-              <label><input type="checkbox" id="ciResearch"> 查找职业知识库与本次导入的资料</label>
-              <div class="ci-context-detail">
-                <label for="ciFile" class="ci-label">导入个人资料</label>
-                <input id="ciFile" type="file" accept=".pdf,.txt,.md,.csv" aria-describedby="ciFileHelp" multiple>
-                <p id="ciFileHelp" class="ci-muted">每次最多 3 份。文件在浏览器提取文字，可先核对内容。</p>
-                <div id="ciDocuments"></div>
-              </div>
-              <label><input type="checkbox" id="ciLive"> 检索实时公开信息</label>
-              <div class="ci-context-detail" id="ciSearchFields" hidden>
-                <label for="ciPublicQuery" class="ci-label">公开搜索词</label>
-                <input id="ciPublicQuery" type="text" maxlength="180" placeholder="例如：电池研发 校招 招聘要求">
-                <p class="ci-muted">搜索服务只接收这里的关键词。请填写岗位、学校或行业，省略个人信息。</p>
-              </div>
-            </details>
-            <div class="ci-form-actions">
-              <label class="ci-check"><input type="checkbox" id="ciChallenge"> 反向检验我的假设</label>
-              <button id="ciSubmit" class="ci-button ci-button-primary" type="submit"></button>
+            <div id="ciDocuments" class="ci-documents"></div>
+            <div id="ciProfileReply" class="ci-context-focus" hidden>
+              <span id="ciProfileReplyHint"></span>
+              <button id="ciSkipProfileReply" type="button" class="ci-link">仅聊天</button>
             </div>
-            <p id="ciStatus" role="status" class="ci-status"></p>
-          </form>
-        </section>
-        <aside class="ci-panel ci-memory" aria-labelledby="ciMemoryTitle">
-          <h2 id="ciMemoryTitle">我的规划记录</h2>
-          <p class="ci-muted">手动保存有用的分析、偏好和经历，供下一次规划参考。记录保存在此浏览器。</p>
-          <form id="ciNoteForm">
-            <label class="ci-label" for="ciNote">新的经历、长期目标或生活偏好</label>
-            <textarea id="ciNote" rows="2" maxlength="1000" required></textarea>
-            <div class="ci-inline-actions">
-              <button type="submit" class="ci-button ci-button-light" value="save">保存</button>
-              <button type="submit" class="ci-link" value="discover">保存并探索新机会</button>
+            <label for="ciMessage" class="ci-sr-only">向职业规划 AI 发送消息</label>
+            <textarea id="ciMessage" name="message" rows="2" maxlength="4000" aria-describedby="ciTaskHelp" placeholder="输入你的经历、目标或困惑，让 AI 帮你一起梳理……" required></textarea>
+            <div class="ci-composer-toolbar">
+              <button id="ciAttach" class="ci-icon-button" type="button" aria-label="上传个人资料"><svg class="ci-icon" aria-hidden="true"><use href="#ci-icon-attach"/></svg></button>
+              <details id="ciContext" class="ci-context">
+                <summary id="ciSettingsButton" aria-controls="ciSettingsPanel"><svg class="ci-icon" aria-hidden="true"><use href="#ci-icon-settings"/></svg><span>资料与分析设置</span></summary>
+                <div id="ciSettingsPanel" class="ci-settings-panel">
+                  <h3>资料与分析设置</h3>
+                  <p class="ci-muted">勾选后，对应资料用于本次在线分析。</p>
+                  <label><input type="checkbox" id="ciUseProfile"> 本次参考已授权的个人资料</label>
+                  <label><input type="checkbox" id="ciUseLocalProfile"> 同时参考本机旧测评与经历（需授权）</label>
+                  <label><input type="checkbox" id="ciUseHistory"> 参考历史问答与已保存的规划记录</label>
+                  <label><input type="checkbox" id="ciResearch"> 查找职业知识库与本次导入的资料</label>
+                  <label><input type="checkbox" id="ciLive"> 检索实时公开信息</label>
+                  <div id="ciSearchFields" class="ci-context-detail" hidden>
+                    <label for="ciPublicQuery" class="ci-label">公开搜索词</label>
+                    <input id="ciPublicQuery" type="text" maxlength="180" placeholder="例如：电池研发 校招 招聘要求">
+                    <p class="ci-muted">搜索服务只接收这里的关键词。请填写岗位、学校或行业，省略个人信息。</p>
+                  </div>
+                  <label><input type="checkbox" id="ciChallenge"> 反向检验我的假设</label>
+                </div>
+              </details>
+              <span class="ci-composer-spacer"></span>
+              <button id="ciStop" class="ci-icon-button ci-stop" type="button" aria-label="停止生成" hidden><span aria-hidden="true"></span></button>
+              <button id="ciSubmit" class="ci-icon-button ci-send" type="submit" aria-label="发送消息" disabled><svg class="ci-icon" aria-hidden="true"><use href="#ci-icon-send"/></svg></button>
             </div>
+            <input id="ciFile" type="file" accept=".pdf,.txt,.md,.csv" aria-describedby="ciFileHelp" multiple hidden>
           </form>
-          <p id="ciMemoryStatus" class="ci-status" role="status"></p>
-          <div id="ciMemoryList" class="ci-memory-list"></div>
-        </aside>
+          <div class="ci-composer-meta"><div id="ciSourcesTags" class="ci-sources-tags" aria-label="当前选用的资料"></div><p id="ciStatus" role="status" class="ci-status"></p></div>
+          <p id="ciFileHelp" class="ci-composer-help">支持 PDF、TXT、MD、CSV，每份最多 5 MB，每次最多 3 份。对话保存在此浏览器。</p>
+        </div>
       </div>
-      <section class="ci-panel ci-results" id="ciResults" aria-label="规划分析结果" hidden></section>
-      <dialog id="ciTreeDialog" class="ci-tree-dialog" aria-labelledby="ciTreeTitle">
-        <form id="ciTreeForm">
-          <h2 id="ciTreeTitle">确认写入职业树</h2>
-          <p class="ci-muted">勾选想保留的方向，可在写入前修改名称与说明。</p>
-          <label class="ci-label" for="ciTreeChoice">目标职业树</label>
-          <select id="ciTreeChoice"></select>
-          <label class="ci-label" for="ciTreeMode" id="ciTreeModeLabel" hidden>写入方式</label>
-          <select id="ciTreeMode" hidden><option value="add">新增分支</option><option value="update">更新一个节点</option></select>
-          <label class="ci-label" for="ciTreeNode" id="ciTreeNodeLabel" hidden></label>
-          <select id="ciTreeNode" hidden></select>
-          <div id="ciDrafts"></div>
-          <p id="ciTreeStatus" class="ci-status" role="status"></p>
-          <div class="ci-inline-actions">
-            <button class="ci-button ci-button-light" id="ciCancelTree" type="button">取消</button>
-            <button class="ci-button ci-button-primary" id="ciConfirmTree" type="submit">确认写入</button>
-          </div>
+      <dialog id="ciProfileConsentDialog" class="ci-dialog" aria-labelledby="ciProfileConsentTitle">
+        <header class="ci-dialog-heading"><h2 id="ciProfileConsentTitle">授权在线 AI 参考个人资料</h2></header>
+        <p class="ci-muted">开启后，教育背景、项目与科研经历、技能和职业偏好会发送到当前配置的第三方在线 AI 服务，用于生成职业建议。服务器按当前访客身份读取统一资料，并做基础脱敏。</p>
+        <label class="ci-consent-choice"><input id="ciConsentIncludeLocal" type="checkbox"><span>同时使用本浏览器保存的旧测评背景与经历。仅引用教育、经历和明确目标，不上传旧评分或全部浏览器记录。</span></label>
+        <p class="ci-muted">此授权会被记住。每次问答都可选择“本次不使用个人资料”；历史问答、文件和联网检索仍由各自开关控制。</p>
+        <div class="ci-inline-actions"><button id="ciProfileConsentAccept" class="ci-button ci-button-primary" type="button">授权并使用</button><button id="ciProfileConsentCancel" class="ci-button ci-button-light" type="button">暂不授权</button></div>
+        <p id="ciProfileConsentStatus" class="ci-status" role="status"></p>
+      </dialog>
+      <dialog id="ciRecordsDialog" class="ci-dialog ci-records-dialog" aria-labelledby="ciMemoryTitle">
+        <header class="ci-dialog-heading"><h2 id="ciMemoryTitle">我的规划记录</h2><button class="ci-icon-button" type="button" data-ci-close="ciRecordsDialog" aria-label="关闭规划记录"><svg class="ci-icon" aria-hidden="true"><use href="#ci-icon-close"/></svg></button></header>
+        <p class="ci-muted">已确认保存的分析和规划，可作为下一次对话的参考。</p>
+        <p id="ciRecordsStatus" class="ci-status" role="status"></p>
+        <div id="ciMemoryList" class="ci-memory-list"></div>
+      </dialog>
+      <dialog id="ciProfileDialog" class="ci-dialog" aria-labelledby="ciProfileTitle">
+        <header class="ci-dialog-heading"><h2 id="ciProfileTitle">个人资料与成长经历</h2><button class="ci-icon-button" type="button" data-ci-close="ciProfileDialog" aria-label="关闭个人资料"><svg class="ci-icon" aria-hidden="true"><use href="#ci-icon-close"/></svg></button></header>
+        <form id="ciProfileForm">
+          <label class="ci-label" for="ciProfileField">本人信息</label>
+          <select id="ciProfileField"></select>
+          <label class="ci-label" for="ciProfileValue" id="ciProfileValueLabel">当前内容</label>
+          <textarea id="ciProfileValue" rows="3" placeholder="填写或修改此项，留空保存可清除"></textarea>
+          <p class="ci-muted">保存后可在问答中引用。首次把资料发送给在线 AI 时，会单独征求授权。</p>
+          <button id="ciProfileSave" type="submit" class="ci-button ci-button-primary">保存资料</button>
+          <p id="ciProfileStatus" class="ci-status" role="status"></p>
         </form>
+        <a class="ci-link" href="/start#profileCard">查看统一资料 ↗</a>
+        <details class="ci-detail">
+        <summary>新增规划笔记</summary>
+        <form id="ciNoteForm">
+          <label class="ci-label" for="ciNote">新的经历、长期目标或生活偏好</label>
+          <textarea id="ciNote" rows="4" maxlength="1000" placeholder="例如：我刚完成一个材料预测项目，更想了解交叉科研。" required></textarea>
+          <p class="ci-muted ci-note-help">笔记保存在“我的规划记录”。开启历史记录后，AI 可参考这些笔记。</p>
+          <div class="ci-inline-actions"><button type="submit" class="ci-button ci-button-primary" value="save">保存</button><button type="submit" class="ci-button ci-button-light" value="discover">保存并探索新机会</button></div>
+        </form>
+        <p id="ciMemoryStatus" class="ci-status" role="status"></p>
+        </details>
       </dialog>
     </section>
 
@@ -2876,7 +2949,7 @@
     if (currentStep === 1) showDirectionQuestion(readWorkspaceRoute().detail);
     if (currentStep === 4) renderJobSearchProfile();
     if (currentStep === 5 && hasMeaningfulTestData(appData)) buildReport();
-    updateWorkspaceProgress();
+    if (typeof updateWorkspaceProgress === 'function') updateWorkspaceProgress();
   });
 
   /* ============================================

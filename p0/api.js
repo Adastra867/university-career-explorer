@@ -4,6 +4,7 @@ import { emptyProfile, FIELD_PATHS, TASK_TYPES, PROFILE_DEPENDENCIES, aiStatus, 
 import { openCareerStore, check, failure, digest, id, opaque, stable, passwordMatches } from './store.js';
 
 export const NOTICE_VERSION = 'p0-v1';
+export const AI_PROFILE_NOTICE_VERSION = 'career-ai-profile-v1';
 const FIELD_SET = new Set(FIELD_PATHS);
 const QUESTION_FIELDS = new Set([...FIELD_PATHS,'experience.personal_action','task.compare_options','task.priority','task.target_role','task.constraints']);
 const DEPENDENCIES = PROFILE_DEPENDENCIES;
@@ -90,7 +91,24 @@ export function createCareerRouter(options = {}) {
   }
   cleanup();
   const cleaner = setInterval(() => { try { cleanup(); } catch { /* Never log document contents or credentials. */ } }, 15*60000); cleaner.unref();
-  router.locals = { store, cleanup, close() { clearInterval(cleaner); if (!options.store) store.close(); } };
+  function resolveProfile(req) {
+    let currentGuest;
+    try { currentGuest = guest(req); }
+    catch (error) {
+      if (error.status !== 401) throw error;
+      return {
+        authenticated: false, consent: false, profile: null, source: 'sqlite',
+        status: cookie(req, 'career_guest') ? 'session_expired' : 'not_connected',
+      };
+    }
+    const currentProfile = profile(currentGuest.id);
+    const consent = currentProfile.ai_profile_consent;
+    return {
+      authenticated: true, status: 'connected', source: 'sqlite', profile: currentProfile,
+      consent: consent?.granted === true && consent.notice_version === AI_PROFILE_NOTICE_VERSION,
+    };
+  }
+  router.locals = { store, cleanup, resolveProfile, close() { clearInterval(cleaner); if (!options.store) store.close(); } };
   router.use(express.json({ limit:'256kb' }));
   router.use((req,res,next) => {
     res.set('Cache-Control','no-store'); res.set('X-Content-Type-Options','nosniff');
@@ -108,6 +126,10 @@ export function createCareerRouter(options = {}) {
     let g;
     try { g = guest(req); } catch { /* Establish only after explicit notice consent. */ }
     if (!g) {
+      if (req.body?.existing_only === true) {
+        throw failure(401, cookie(req,'career_guest') ? 'SESSION_EXPIRED' : 'UNAUTHENTICATED',
+          '原访客会话已失效，请先在统一资料页重新连接。');
+      }
       check(req.body?.consent === true && req.body.notice_version === NOTICE_VERSION, '请先阅读并确认资料处理说明。','NOTICE_REQUIRED');
       if(cookie(req,'career_guest')) { clearCookie(res,'career_guest'); throw failure(401,'SESSION_EXPIRED','原会话已失效，请确认说明后重新开始。'); }
       const token = opaque();
@@ -119,6 +141,24 @@ export function createCareerRouter(options = {}) {
   });
   router.get('/campaigns/:slug/public',(req,res) => res.json(publicCampaign(campaign(req.params.slug))));
   router.get('/me/profile',(req,res) => res.json(profile(guest(req).id)));
+  router.post('/me/profile/ai-consent', (req, res) => {
+    const currentGuest = guest(req);
+    csrf(req, currentGuest);
+    check(req.body && typeof req.body.consent === 'boolean' &&
+      req.body.notice_version === AI_PROFILE_NOTICE_VERSION &&
+      Object.keys(req.body).every(key => ['consent', 'notice_version'].includes(key)),
+    '请明确确认本次在线 AI 个人资料使用说明。', 'AI_PROFILE_CONSENT_REQUIRED');
+    const next = store.transaction(() => {
+      const current = profile(currentGuest.id);
+      current.ai_profile_consent = {
+        granted: req.body.consent, notice_version: AI_PROFILE_NOTICE_VERSION, updated_at: stamp(),
+      };
+      current.profile_revision++;
+      store.run('UPDATE profiles SET data=? WHERE owner_id=?', JSON.stringify(current), currentGuest.id);
+      return current;
+    });
+    res.json(next);
+  });
   router.patch('/me/profile',(req,res) => {
     const g=guest(req); csrf(req,g);
     const next=store.transaction(() => {
@@ -130,7 +170,7 @@ export function createCareerRouter(options = {}) {
         check(Object.keys(patch).every(k => ['field_path','value','confirm'].includes(k)));
         const value=patch.value === null ? null : text(patch.value,patch.field_path === 'experience.text' ? 20000 : 2000);
         const old=p.fields[patch.field_path];
-        const changed=old.value !== value;
+        const changed=old.value !== value || (value === null && old.source_type !== 'user_form' && patch.confirm !== true);
         p.fields[patch.field_path] = changed ? {value,value_state:value === null ? 'unknown':'known',source_type:'user_form',source_refs:[{source_id:id('edit'),quote:value ?? ''}],previous_source_refs:old.source_refs,confirmation_state:'corrected',updated_at:stamp()} : {...old,confirmation_state:patch.confirm === true ? 'confirmed':old.confirmation_state,updated_at:stamp()};
       }
       p.profile_revision++; saveProfile(g.id,p,previous); return p;

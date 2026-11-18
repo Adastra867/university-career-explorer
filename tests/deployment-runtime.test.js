@@ -63,12 +63,24 @@ test(`${runtime.label} without persistent storage serves the site and rejects cl
     await wait(50);
   }
   assert.ok(ready, `Production server failed to start: ${output}`);
-  for (const path of ['/', '/start', '/admin', '/trees', '/job-search.html', '/p0/start.js', '/journey/app.js']) {
+  for (const path of [
+    '/', '/index.html', '/start', '/admin', '/trees', '/job-search.html', '/career-prep.html',
+    '/p0/start.js', '/journey/app.js', '/scripts/career-chat-store.js', '/scripts/career-intelligence.js',
+    '/styles/career-intelligence.css', '/assets/career/career-orbit.webp', '/vendor/chart.umd.js',
+  ]) {
     assert.equal((await fetch(base + path)).status, 200, path);
+  }
+  for (const path of [
+    '/.env', '/data/career.sqlite', '/artifacts/p0/student-mobile.png',
+    '/exports/career-records.json', '/backups/profile.zip', '/logs/career.log',
+    '/package.json', '/render.yaml', '/scripts/deploy.ps1', '/scripts/career-admin.mjs',
+    '/scripts%2fcareer-admin.mjs', '/scripts%5ccareer-admin.mjs',
+  ]) {
+    assert.equal((await fetch(base + path)).status, 404, path);
   }
   for (const [method, path] of [
     ['GET', '/api/career/status'], ['POST', '/api/guest-session'],
-    ['GET', '/api/me/profile'], ['POST', '/api/intakes'],
+    ['GET', '/api/me/profile'], ['POST', '/api/me/profile/ai-consent'], ['POST', '/api/intakes'],
     ['POST', '/api/intakes/fixture/turns'], ['POST', '/api/submissions'],
     ['GET', '/api/admin/session'], ['GET', '/api/admin/campaigns/fixture/qr.svg'],
   ]) {

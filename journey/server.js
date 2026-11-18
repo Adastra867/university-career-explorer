@@ -378,7 +378,12 @@ export function createJourneyRouter(options = {}) {
     } catch (error) { next(error); }
   });
 
-  const aiDependencies = { options, env, now, aiProvider, research, buildContext, acquireSlot, releaseSlot: () => { concurrent -= 1; }, signatureSecret, graphFingerprint, digest };
+  const aiDependencies = {
+    options, env, now, aiProvider, research, buildContext, acquireSlot, releaseSlot: () => { concurrent -= 1; },
+    signatureSecret, graphFingerprint, digest,
+    resolveCareerProfile: options.resolveCareerProfile,
+    profileLogger: options.profileLogger,
+  };
   installV11Routes(router, aiDependencies);
   installCareerIntelligenceRoute(router, aiDependencies);
 
@@ -393,7 +398,11 @@ export function createJourneyRouter(options = {}) {
     const graphError = ['INVALID_GRAPH', 'INVALID_OPERATION', 'INVALID_PROPOSAL'].includes(code);
     const status = error.status || (code === 'REVISION_CONFLICT' ? 409 : graphError ? 422 : 503);
     const known = error.status || graphError || code === 'REVISION_CONFLICT';
-    res.status(status).json({ success: false, code: known ? code : 'AI_UNAVAILABLE', error: known ? error.message : 'AI 暂时不可用，你仍然可以手动编辑人生树。' });
+    res.status(status).json({
+      success: false, code: known ? code : 'AI_UNAVAILABLE',
+      error: known ? error.message : 'AI 暂时不可用，你仍然可以手动编辑人生树。',
+      ...(error.profileDiagnostics ? { profileDiagnostics: error.profileDiagnostics, requestId: error.requestId } : {}),
+    });
   });
   return router;
 }

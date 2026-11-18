@@ -24,17 +24,25 @@
     <nav class="career-nav no-print" aria-label="主导航">
       <a class="career-wordmark" href="${workspace}"><span aria-hidden="true">✦</span>职途星轨</a>
       <div class="career-nav-primary">
-        <p class="career-nav-label">探索模块</p>
-        ${navLink('intelligence', 'career-desktop-link')}
-        ${['home', 'direction', 'ability', 'jobs'].map(key => navLink(key)).join('')}
-        ${navLink('sprint', 'career-desktop-link')}
+        ${navLink('home')}
+        <div class="career-nav-planning" role="group" aria-labelledby="careerPlanningLabel">
+          <p class="career-nav-label" id="careerPlanningLabel">职业规划</p>
+          ${navLink('intelligence', 'career-desktop-link')}
+          ${['direction', 'ability', 'jobs'].map(key => navLink(key)).join('')}
+          ${navLink('sprint', 'career-desktop-link')}
+          ${navLink('profile', 'career-desktop-link')}
+        </div>
         <button class="career-nav-link career-more" type="button" aria-expanded="false" aria-controls="careerMore"><span aria-hidden="true" class="career-nav-icon">···</span><span>更多</span></button>
       </div>
       <div id="careerMore" class="career-nav-secondary">
-        ${navLink('intelligence', 'career-mobile-link')}
-        ${navLink('sprint', 'career-mobile-link')}
-        <p class="career-nav-label">个人空间</p>
-        ${['roadmap', 'reports', 'history', 'profile'].map(key => navLink(key)).join('')}
+        <div class="career-nav-mobile-planning" role="group" aria-labelledby="careerMobilePlanningLabel">
+          <p class="career-nav-label" id="careerMobilePlanningLabel">职业规划</p>
+          ${['intelligence', 'sprint', 'profile'].map(key => navLink(key, 'career-mobile-link')).join('')}
+        </div>
+        <div role="group" aria-labelledby="careerPersonalLabel">
+          <p class="career-nav-label" id="careerPersonalLabel">个人空间</p>
+          ${['roadmap', 'reports', 'history'].map(key => navLink(key)).join('')}
+        </div>
       </div>
     </nav>
     <div class="career-body">

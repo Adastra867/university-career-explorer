@@ -65,6 +65,29 @@ try{
     assert.equal(after.question_count,before.question_count);assert.equal(after.answers.length,1);assert.equal(after.input_revision,before.input_revision);assert.equal(await b.evaluate(()=>sessionStorage.getItem('careerP0Turn')),null);await b.unroute('**/api/intakes/*/turns');
   });
   await check('逐项编辑、旧结果过期与不可变快照',async()=>{const original=(await json(admin,'/api/admin/submissions/'+receipt.id)).body.snapshot;const row=a.locator('#profilePrimary .profile-row').filter({has:a.locator('strong',{hasText:'专业'})});await row.locator('summary').click();await row.locator('textarea').fill('能源与动力工程');await row.locator('button').click();await a.waitForFunction(()=>!document.getElementById('staleWarning').hidden);const current=(await json(a,'/api/me/profile')).body;assert.equal(current.fields['education.major'].value,'能源与动力工程');assert.equal(current.fields['education.major'].confirmation_state,'corrected');const unchanged=(await json(admin,'/api/admin/submissions/'+receipt.id)).body.snapshot;assert.deepEqual(unchanged,original);});
+  await check('统一资料直链聚焦资料并保留工作台导航', async()=>{
+    const profilePage=await aContext.newPage();
+    watch(profilePage);
+    try {
+      const before=(await json(a,'/api/intakes')).body.items.length;
+      await profilePage.goto(origin+'/start#profileCard');
+      await profilePage.locator('#profileCard').waitFor({state:'visible'});
+      assert.equal(await profilePage.locator('#careerPageTitle').innerText(),'统一资料与提交');
+      assert.equal(await profilePage.locator('#profileTitle').innerText(),'我的统一资料');
+      assert.equal(await profilePage.locator('#editor').isVisible(),false);
+      assert.equal((await overflow(profilePage)).overflow,false);
+      await profilePage.locator('.career-more').click();
+      await profilePage.locator('[data-career-nav="profile"][aria-current="page"]:visible').waitFor();
+      await profilePage.locator('.career-mobile-link[data-career-nav="sprint"]').click();
+      await profilePage.locator('#sprintNext').waitFor({state:'visible'});
+      await profilePage.goBack();
+      await profilePage.locator('#profileCard').waitFor({state:'visible'});
+      assert.equal(await profilePage.locator('#careerPageTitle').innerText(),'统一资料与提交');
+      assert.equal((await json(a,'/api/intakes')).body.items.length,before);
+    } finally {
+      await profilePage.close();
+    }
+  });
   await check('全站统一资料读取与显式清空',async()=>{const prep=await aContext.newPage();watch(prep);await prep.goto(origin+'/career-prep.html');await prep.waitForFunction(()=>window.CareerProfile?.profile);assert.match(await prep.locator('#resume').inputValue(),/没有项目和实习/);const session=(await json(a,'/api/guest-session',{method:'POST',body:JSON.stringify({consent:true,notice_version:'p0-v1'})})).body;const profile=(await json(a,'/api/me/profile')).body;const cleared=await json(a,'/api/me/profile',{method:'PATCH',headers:{'X-CSRF-Token':session.csrf_token},body:JSON.stringify({expected_revision:profile.profile_revision,patch:[{field_path:'experience.text',value:null}]})});assert.equal(cleared.status,200);await prep.evaluate(()=>window.CareerProfile.refresh());assert.equal(await prep.locator('#resume').inputValue(),'');await prep.close();});
   await check('390px / 1440px布局与真实保存失败状态',async()=>{await a.reload();await a.locator('#editor').waitFor({state:'visible'});assert.equal((await overflow(a)).overflow,false);assert.equal((await overflow(b)).overflow,false);assert.equal((await overflow(admin)).overflow,false);await screenshot(a,'student-mobile-390.png');await screenshot(b,'student-desktop-1440.png');await admin.locator('#closeDetailBtn').click();await screenshot(admin,'admin-desktop-1440.png');let abort=true;await a.route('**/api/intakes/*/draft',route=>abort?route.abort('failed'):route.continue());await a.locator('#mainInput').fill('大一，能源专业，没有实习，新增一条尚未保存的情况。');await a.waitForFunction(()=>document.getElementById('saveStatus').textContent.includes('保存失败'));assert.match(await a.locator('#mainInput').inputValue(),/新增一条/);assert.match(await a.locator('#saveStatus').innerText(),/仅保存在此设备/);abort=false;await a.locator('#saveBtn').click();await a.waitForFunction(()=>document.getElementById('saveStatus').textContent.includes('已保存到服务器'));await a.unroute('**/api/intakes/*/draft');});
   await check('撤回全部历史共享与旧详情正文失效',async()=>{await a.locator('#submissionList button').first().click();await a.waitForFunction(()=>document.getElementById('submissionList').textContent.includes('已撤回'));const detail=await json(admin,'/api/admin/submissions/'+receipt.id);assert.equal(detail.body.status,'withdrawn');assert.equal(detail.body.snapshot,null);await admin.locator('#filterForm button').click();await admin.waitForFunction(()=>document.getElementById('recordRows').textContent.includes('已撤回'));await admin.locator('#recordRows button').first().click();await admin.waitForFunction(()=>document.getElementById('detailStatus').textContent.includes('历史正文不再可见'));assert.equal(await admin.locator('#detailContent').innerText(),'');});

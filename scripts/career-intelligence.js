@@ -10,34 +10,58 @@
   const kinds = { steady: '稳健路线', advanced: '进阶路线', cross_field: '跨界路线', exploratory: '探索路线', aspirational: '理想路线' };
   const confidence = { low: '低', medium: '中', high: '高' };
   const stages = { near: '近期 · 0–6 个月', mid: '中期 · 6 个月–2 年', long: '远期 · 2–5 年及以上' };
+  const threeYearStages = { near: '近期 · 0–3 个月', mid: '中期 · 3–12 个月', long: '远期 · 1–3 年' };
   const dimensions = { interest_fit: '兴趣匹配', ability_fit: '能力匹配', transition_cost: '转型成本', time_cost: '时间成本', economic_cost: '经济成本', market_demand: '市场需求', competition: '竞争程度', growth: '长期发展', flexibility: '转向灵活性', lifestyle_fit: '生活方式' };
   const storageKey = 'careerIntelligenceV1';
   const documentKey = 'careerIntelligenceDocumentsV1';
+  const profilePreferenceKey = 'careerChatUseProfile';
+  const profileConsentKey = 'careerAIProfileConsentV1';
+  const profileConsentVersion = 'career-ai-profile-v1';
+  const profileLabels = {
+    'education.major': '专业', 'education.stage': '年级或职业阶段', 'education.degree': '学历',
+    'education.school': '学校', 'experience.text': '学习、项目或工作经历', 'skills.self_report': '技能',
+    'preferences.long_term_goal': '长期目标', 'preferences.city': '城市偏好',
+  };
+  const prompts = {
+    profile: '请利用我已提供或已授权的资料，直接梳理最多 3 项核心优势、3 项可迁移能力、2～3 个潜在发展方向和3 项值得提升的能力。区分已有依据与推测；资料少时也先给初步分析和验证方法，不要求填写完整画像。',
+    explore: '请基于已有信息主动探索 3～5 条有实质区别的发展方向，说明推荐依据、已有优势、关键能力缺口和一个低成本验证方式。考虑本专业、跨专业、交叉学科与潜在创业机会。背景少时标明通用探索，先给方案。',
+    plan: '请直接制定一份可执行的初步成长路线。近期 0～3 个月、中期 3～12 个月、远期 1～3 年，每阶段给 2～3 项行动或目标，最后指出现在最值得做的第一件事。缺少年级或明确方向时，用探索步骤和条件分支处理，并标明关键假设。',
+    compare: '请直接比较我正在考虑的选择，从兴趣和能力适配、时间与经济成本、风险和长期灵活性解释收益、限制与机会成本。没有权重时使用定性比较，未知条件用适用情景处理。先给结论与可执行的验证步骤。',
+    growth: '请利用我已提供或已授权的经历和目标，指出当前最值得优先解决的问题，推荐 3 项行动并解释各自目的，最后给一个现在就能完成的小任务。资料不足时给通用起步建议，默认不反问。',
+  };
+  const optionIds = { profile: 'ciUseProfile', history: 'ciUseHistory', research: 'ciResearch', live: 'ciLive', challenge: 'ciChallenge' };
   const message = byId('ciMessage');
-  const results = byId('ciResults');
-  const dialog = byId('ciTreeDialog');
+  const sessions = CareerChatStore.create();
+  let session = null;
   let task = 'explore';
   let turn = null;
   let request = null;
-  let continuation = null;
   let focusNode = null;
   let activeRoute = '';
   let activation = 0;
-  let documents = readArray(documentKey).filter(item => item?.id && typeof item.text === 'string').slice(0, 3);
+  let documents = [];
   let importing = false;
-  let treeBridge;
-  let treeDraft;
+  let draftTimer;
+  let profileOverride = null;
+  let consentRequest = null;
   const selectedRoutes = new Map();
 
-  function readArray(key) {
+  function readArray(key, strict = false) {
     try {
-      const value = JSON.parse(localStorage.getItem(key));
-      return Array.isArray(value) ? value : [];
-    } catch { return []; }
+      const raw = localStorage.getItem(key);
+      if (raw === null) return [];
+      const value = JSON.parse(raw);
+      if (!Array.isArray(value)) throw new Error('记录格式无效');
+      return value;
+    } catch {
+      if (strict) throw new Error('已有记录无法读取，原内容已保留。请检查浏览器存储后重试。');
+      return [];
+    }
   }
 
   function status(id, value, error = false) {
     const node = byId(id);
+    if (!node) return;
     node.textContent = value;
     node.dataset.error = String(error);
   }
@@ -57,12 +81,198 @@
     return element;
   }
 
-  function records() {
-    return readArray(storageKey).filter(item => item?.id && (item.note || item.result?.task));
+  function records(strict = false) {
+    return readArray(storageKey, strict).filter(item => item?.id && (item.note || item.result?.task));
+  }
+
+  function contextOptions() {
+    const options = { ...Object.fromEntries(Object.entries(optionIds).map(([key, id]) => [key, byId(id).checked])),
+      localProfile: byId('ciUseLocalProfile').checked, publicSearchQuery: byId('ciPublicQuery').value };
+    if (profileOverride === null && (!hasProfileConsent() || window.CareerProfile.state === 'loading')) delete options.profile;
+    return options;
+  }
+
+  function captureSession() {
+    if (!session) return;
+    session.draft = message.value;
+    session.task = task;
+    session.contextOptions = contextOptions();
+    session.attachments = documents;
+    session.focusNode = focusNode;
+    session.routes = [...selectedRoutes.values()];
+  }
+
+  function persistSession() {
+    if (!session) return true;
+    clearTimeout(draftTimer);
+    captureSession();
+    try {
+      session = sessions.save(session);
+      renderSessions();
+      return true;
+    } catch (error) {
+      status('ciStatus', `${error.message} 当前内容仍在此页面，可复制后重试。`, true);
+      renderSessions();
+      return false;
+    }
+  }
+
+  function scheduleDraft() {
+    resizeComposer();
+    if (!session && !message.value.trim()) return;
+    if (!session && !createSession({ prompt: message.value, nextTask: task, inheritContext: true })) return;
+    clearTimeout(draftTimer);
+    draftTimer = setTimeout(persistSession, 300);
+  }
+
+  function resizeComposer() {
+    message.style.height = 'auto';
+    message.style.height = `${Math.min(180, Math.max(48, message.scrollHeight))}px`;
+    byId('ciSubmit').disabled = Boolean(request) || importing || !message.value.trim();
+    byId('ciStop').hidden = !request;
+    byId('ciSubmit').hidden = Boolean(request);
+  }
+
+  function setSessionURL(id, replace = false) {
+    const href = `/index.html#intelligence/chat/${encodeURIComponent(id)}`;
+    history[replace ? 'replaceState' : 'pushState'](null, '', href);
+    activeRoute = `chat/${id}/`;
+  }
+
+  function createSession({ prompt = '', nextTask = 'explore', inheritContext = false } = {}) {
+    const settings = inheritContext ? contextOptions() : {};
+    cancelRequest();
+    if (session && !persistSession()) return false;
+    const now = new Date().toISOString();
+    const next = { id: crypto.randomUUID(), title: '新对话', createdAt: now, updatedAt: now, revision: 0,
+      messages: [], contextOptions: settings, attachments: [], draft: prompt, task: nextTask, routes: [], focusNode: null };
+    try { session = sessions.save(next); }
+    catch (error) { status('ciStatus', error.message, true); return false; }
+    applySession();
+    setSessionURL(session.id);
+    closeSidebar();
+    message.focus();
+    return true;
+  }
+
+  function applySession() {
+    documents = session?.attachments || [];
+    focusNode = session?.focusNode || null;
+    selectedRoutes.clear();
+    for (const route of session?.routes || []) selectedRoutes.set(route.id, route);
+    const settings = session?.contextOptions || {};
+    for (const [key, id] of Object.entries(optionIds)) byId(id).checked = settings[key] === true;
+    profileOverride = Object.hasOwn(settings, 'profile') ? settings.profile === true : null;
+    byId('ciUseLocalProfile').checked = localProfileConsent().includeLegacy === true && settings.localProfile !== false;
+    syncProfileChoice();
+    byId('ciPublicQuery').value = settings.publicSearchQuery || '';
+    message.value = session?.draft || '';
+    task = session?.task || 'explore';
+    turn = session?.messages.findLast(item => item.role === 'assistant' && item.metadata?.record)?.metadata.record || null;
+    refreshSettings();
+    selectTask(task);
+    renderFocus();
+    renderDocuments();
+    renderThread();
+    renderSessions();
+    resizeComposer();
+  }
+
+  function openSession(id) {
+    if (session?.id === id) return;
+    cancelRequest();
+    if (session && !persistSession()) return;
+    const saved = sessions.get(id);
+    if (!saved) return status('ciStatus', '这条对话已删除或无法读取。', true);
+    session = saved;
+    applySession();
+    setSessionURL(id);
+    status('ciStatus', '');
+    closeSidebar();
+  }
+
+  function renderSessions() {
+    const parent = byId('ciSessions');
+    parent.replaceChildren();
+    const items = sessions.list(byId('ciSessionSearch').value);
+    if (!items.length) add(parent, 'p', byId('ciSessionSearch').value ? '没有找到相关对话' : '从一个问题开始吧', 'ci-muted ci-session-empty');
+    for (const item of items) {
+      const row = add(parent, 'div', '', `ci-session${session?.id === item.id ? ' is-active' : ''}`);
+      const open = button(row, '', () => openSession(item.id), 'ci-session-open');
+      if (session?.id === item.id) open.setAttribute('aria-current', 'true');
+      add(open, 'span', item.title, 'ci-session-title');
+      add(open, 'time', dateLabel(item.updatedAt), 'ci-session-time');
+      const menu = add(row, 'details', '', 'ci-session-menu');
+      const summary = add(menu, 'summary', '···');
+      summary.setAttribute('aria-label', `${item.title} 的操作`);
+      button(menu, '重命名', () => {
+        const title = window.prompt('对话名称', item.title)?.trim();
+        if (!title) return;
+        if (request && session?.id === item.id) return status('ciStatus', '请先停止生成，再重命名对话。', true);
+        try {
+          if (session?.id === item.id && !persistSession()) return;
+          const renamed = sessions.rename(item.id, title);
+          if (session?.id === item.id) { session = renamed; byId('ciChatTitle').textContent = renamed.title; }
+          renderSessions();
+        } catch (error) { status('ciStatus', error.message, true); }
+      });
+      button(menu, '删除', () => {
+        if (!window.confirm(`删除对话「${item.title}」？已保存的规划记录可以继续查看。`)) return;
+        if (session?.id === item.id) cancelRequest();
+        try {
+          sessions.remove(item.id);
+          if (session?.id === item.id) {
+            session = null;
+            applySession();
+            history.pushState(null, '', '/index.html#intelligence');
+            activeRoute = '//';
+          }
+          renderSessions();
+        } catch (error) { status('ciStatus', error.message, true); }
+      });
+    }
+  }
+
+  function refreshSettings() {
+    byId('ciSearchFields').hidden = !byId('ciLive').checked;
+    const tags = byId('ciSourcesTags');
+    tags.replaceChildren();
+    for (const [key, label] of [['profile', '个人资料'], ['history', '历史记录'], ['research', '职业知识库'], ['live', '实时搜索'], ['challenge', '反向检验']]) {
+      if (byId(optionIds[key]).checked) add(tags, 'span', key === 'live' && !byId('ciPublicQuery').value.trim() ? '实时搜索待补充公开词' : label, 'ci-source-tag');
+    }
+    if (!byId('ciUseProfile').checked && Object.values(window.CareerProfile.readFields()).some(field => field.value_state === 'known')) {
+      button(tags, '参考已保存的个人资料', () => enableProfileUse());
+    }
+    renderProfileConnection();
+  }
+
+  function renderFocus() {
+    const parent = byId('ciFocusNode');
+    parent.replaceChildren();
+    parent.hidden = !focusNode;
+    if (!focusNode) return;
+    add(parent, 'span', `所选方向 · ${focusNode.title}`);
+    button(parent, '移除', () => { focusNode = null; renderFocus(); persistSession(); });
+  }
+
+  function closeSidebar() {
+    const wasOpen = document.body.classList.contains('ci-sidebar-open');
+    document.body.classList.remove('ci-sidebar-open');
+    const mobile = matchMedia('(max-width: 850px)').matches;
+    byId('ciSidebarToggle').setAttribute('aria-expanded', String(!mobile && !document.body.classList.contains('ci-sidebar-collapsed')));
+    byId('ciSidebarBackdrop').hidden = true;
+    byId('ciChatMain').inert = false;
+    byId('ciSidebar').inert = mobile || document.body.classList.contains('ci-sidebar-collapsed');
+    if (wasOpen) {
+      document.querySelector('.career-nav').inert = false;
+      document.querySelector('.career-top').inert = false;
+    }
+    byId('ciSidebar').removeAttribute('aria-modal');
+    byId('ciSidebar').removeAttribute('role');
   }
 
   function writeRecord(record) {
-    const previous = records();
+    const previous = records(true);
     const existing = previous.find(item => item.id === record.id);
     const safe = record.result ? { ...record, result: {
       ...record.result,
@@ -92,7 +302,6 @@
         const link = add(actions, 'a', '查看分析', 'ci-link');
         link.href = `/index.html#intelligence/turn/${encodeURIComponent(record.id)}`;
       }
-      if (record.treeHref) add(actions, 'a', '查看职业树', 'ci-link').href = record.treeHref;
       button(actions, '删除', () => {
         try {
           localStorage.setItem(storageKey, JSON.stringify(records().filter(item => item.id !== record.id)));
@@ -106,7 +315,8 @@
 
   function routePool() {
     const routes = new Map(selectedRoutes);
-    for (const record of [turn, ...records()]) {
+    const conversationRecords = (session?.messages || []).map(item => item.metadata?.record).filter(Boolean);
+    for (const record of [turn, ...conversationRecords, ...records()]) {
       for (const branch of record?.result?.branches || []) {
         if (record.excludedBranches?.includes(branch.id)) continue;
         const id = `${record.id}_${branch.id}`;
@@ -140,13 +350,14 @@
       label.append(document.createTextNode(route.title));
       input.addEventListener('change', () => {
         if (single) selectedRoutes.clear();
-        if (!route.id) return;
+        if (!route.id) { persistSession(); return; }
         if (input.checked && selectedRoutes.size >= 5) {
           input.checked = false;
           return status('ciStatus', '一次最多比较 5 条路线。', true);
         }
         if (input.checked) selectedRoutes.set(route.id, route);
         else selectedRoutes.delete(route.id);
+        persistSession();
         status('ciStatus', '');
       });
     }
@@ -156,15 +367,15 @@
     if (!Object.hasOwn(tasks, next)) next = 'explore';
     if (task !== next) {
       selectedRoutes.clear();
-      continuation = null;
     }
     task = next;
-    const [, title, help, example] = tasks[task];
-    for (const control of byId('ciTasks').children) control.setAttribute('aria-pressed', String(control.dataset.task === task));
+    const [, title, help] = tasks[task];
     byId('ciTaskTitle').textContent = title;
     byId('ciTaskHelp').textContent = help;
-    byId('ciSubmit').textContent = request ? '正在分析…' : title;
-    message.placeholder = example;
+    byId('ciSubmit').setAttribute('aria-label', '发送消息');
+    const indicator = byId('ciTaskIndicator');
+    if (indicator) indicator.textContent = tasks[task][0];
+    message.placeholder = '输入你的经历、目标或困惑，让 AI 帮你一起梳理……';
     renderRouteInput();
   }
 
@@ -173,24 +384,122 @@
     catch { return {}; }
   }
 
-  function profileContext(local) {
-    const profile = window.CareerProfile?.profile;
-    const student = local.studentProfile || {};
-    const locations = local.jobSearchPreferences?.location;
-    const allowedFields = ['education.stage', 'education.degree', 'education.major', 'education.school', 'experience.text', 'skills.self_report', 'preferences.long_term_goal', 'preferences.city'];
-    const fields = Object.fromEntries(allowedFields.filter(key => profile?.fields?.[key]?.value_state === 'known')
+  function profileContext() {
+    const saved = window.CareerProfile.readLocalFields(byId('ciUseLocalProfile').checked);
+    const fields = Object.fromEntries(Object.keys(profileLabels).filter(key => saved[key]?.value_state === 'known')
       .map(key => {
-        const { value, source_type, confirmation_state } = profile.fields[key];
-        return [key, { value_state: 'known', value: String(value).slice(0, 2000), source_type, confirmation_state }];
+        const { value, source_type, confirmation_state } = saved[key];
+        return [key, { value_state: 'known', value: String(value), source_type, confirmation_state }];
       }));
-    if (!fields['experience.text'] && typeof local.experienceText === 'string' && local.experienceText.trim()) {
-      fields['experience.text'] = { value_state: 'known', value: local.experienceText.slice(0, 2000), source_type: 'user_text' };
-    }
     return {
-      consent: true, fields, major: student.major,
-      education: { undergraduate: '本科', graduate: '研究生' }[student.education],
-      preferences: { employmentChoice: student.employmentChoice, location: locations },
+      consent: true, fields,
     };
+  }
+
+  function localProfileConsent() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(profileConsentKey));
+      return saved?.granted === true && saved.notice_version === profileConsentVersion ? saved : {};
+    } catch { return {}; }
+  }
+
+  function hasProfileConsent() {
+    const stored = window.CareerProfile.profile?.ai_profile_consent;
+    if (window.CareerProfile.profile) return stored?.granted === true && stored.notice_version === profileConsentVersion;
+    return localProfileConsent().granted === true;
+  }
+
+  function syncProfileChoice() {
+    byId('ciUseProfile').checked = profileOverride !== false && hasProfileConsent();
+  }
+
+  function renderProfileConnection() {
+    const state = window.CareerProfile.state;
+    const enabled = byId('ciUseProfile').checked;
+    const localFields = window.CareerProfile.readLocalFields(byId('ciUseLocalProfile').checked);
+    const localAvailable = Object.values(localFields).some(field => field.value_state === 'known');
+    let title, help;
+    if (state === 'loading') {
+      title = '正在读取个人资料…';
+      help = '发送前会等待资料读取完成。';
+    } else if (state === 'load_failed') {
+      title = '个人资料加载失败';
+      help = '可重试连接；已授权时，发送请求仍会由服务器核对资料。';
+    } else if (!hasProfileConsent()) {
+      title = window.CareerProfile.profile ? '已连接统一资料 · 待 AI 授权' :
+        state === 'session_expired' ? '访客身份已失效' : localAvailable ? '本浏览器有已保存资料 · 待 AI 授权' : '尚未连接个人资料';
+      help = '授权后，可将教育、经历、技能和职业偏好用于在线 AI 问答。';
+    } else if (!enabled) {
+      title = '本次不使用个人资料';
+      help = '已保存的资料和授权继续保留。';
+    } else if (window.CareerProfile.profile) {
+      title = '已连接个人资料';
+      help = '本次 AI 将参考已保存的教育、经历、技能和职业偏好。';
+    } else {
+      title = localAvailable ? '本次参考已授权的本机资料' : '当前未连接统一资料';
+      help = state === 'session_expired' ? '原访客身份已失效，可重新连接统一资料。' :
+        state === 'storage_unavailable' ? '统一资料服务暂未配置，本次使用获准的本机资料。' : '可先根据本次问题获得建议。';
+    }
+    byId('ciProfileConnectionTitle').textContent = title;
+    byId('ciProfileConnectionHelp').textContent = help;
+    byId('ciProfileUse').textContent = state === 'load_failed' ? '重试连接' :
+      enabled ? '本次不使用个人资料' : hasProfileConsent() ? '本次使用个人资料' : '授权并使用';
+    byId('ciProfileUse').disabled = state === 'loading';
+  }
+
+  function rememberProfileUse(enabled) {
+    profileOverride = enabled;
+    try { localStorage.setItem(profilePreferenceKey, enabled ? 'yes' : 'no'); } catch {}
+    syncProfileChoice();
+    refreshSettings();
+  }
+
+  async function enableProfileUse(includeLegacy = false) {
+    await window.CareerProfile.ready;
+    if (!hasProfileConsent() || includeLegacy && !localProfileConsent().includeLegacy) {
+      if (!consentRequest) {
+        const modal = byId('ciProfileConsentDialog');
+        byId('ciConsentIncludeLocal').checked = includeLegacy || byId('ciUseLocalProfile').checked;
+        status('ciProfileConsentStatus', '');
+        modal.returnValue = '';
+        consentRequest = new Promise(resolve => {
+          modal.addEventListener('close', () => {
+            consentRequest = null;
+            resolve(modal.returnValue === 'accepted');
+          }, { once: true });
+          modal.showModal();
+        });
+      }
+      if (!await consentRequest) {
+        syncProfileChoice();
+        refreshSettings();
+        return false;
+      }
+    }
+    rememberProfileUse(true);
+    byId('ciUseLocalProfile').checked = localProfileConsent().includeLegacy === true;
+    refreshSettings();
+    persistSession();
+    return true;
+  }
+
+  function hasProfileAnswer(field) {
+    const saved = window.CareerProfile.readFields()[field];
+    return saved?.value_state === 'known' && (saved.source_type !== 'ai_inference' || saved.confirmation_state !== 'unconfirmed');
+  }
+
+  function pendingProfileField() {
+    const last = session?.messages.at(-1);
+    const field = last?.metadata?.record?.result?.profileField;
+    if (last?.role !== 'assistant' || last.status !== 'completed' || last.metadata?.profileReplySkipped ||
+        !Object.hasOwn(profileLabels, field)) return null;
+    return hasProfileAnswer(field) ? null : field;
+  }
+
+  function showProfileReply() {
+    const field = pendingProfileField();
+    byId('ciProfileReply').hidden = !field;
+    byId('ciProfileReplyHint').textContent = field ? `下一条回答将保存为「${profileLabels[field]}」，供以后问答参考。` : '';
   }
 
   function historyContext(local) {
@@ -209,82 +518,185 @@
       template.innerHTML = item.content;
       return { role: 'assistant', content: template.content.textContent };
     }).filter(Boolean) : [];
-    return [...previous, ...saved].filter(item => item.content).slice(-8).map(item => ({ ...item, content: item.content.slice(0, 1400) }));
+    const otherConversations = sessions.list().filter(item => item.id !== session?.id).slice(0, 2).reverse().flatMap(item => {
+      const answer = item.messages.findLast(candidate => candidate.status === 'completed' && candidate.metadata?.replyTo);
+      const question = item.messages.find(candidate => candidate.id === answer?.metadata.replyTo);
+      return answer && question ? [{ role: 'user', content: question.content }, { role: 'assistant', content: answer.content }] : [];
+    });
+    return [...previous, ...otherConversations, ...saved].filter(item => item.content).slice(-8).map(item => ({ ...item, content: item.content.slice(0, 1400) }));
   }
 
-  async function run({ opportunityMode = false, explicitQuestion } = {}) {
-    if (request) return;
-    const question = explicitQuestion || message.value.trim();
-    if (!question) {
-      message.focus();
-      return status('ciStatus', '请写下想讨论的问题。', true);
+  function inferTask(question) {
+    if (/比较|对比|权衡|犹豫|怎么选|如何选|应该.*还是|读研还是|就业还是/.test(question)) return 'compare';
+    if (/制定.*(?:计划|路线)|阶段.*(?:计划|路线)|成长路线|阶段性里程碑|成长规划|未来.*年.*(?:规划|路线)/.test(question)) return 'plan';
+    if (/探索.*方向|发现.*方向|哪些.*方向|不同.*方向|不知道.*(?:做什么|方向)|适合.*方向/.test(question)) return 'explore';
+    if (/成长建议|接下来.*行动|下一步.*行动|调整.*计划|优先级|最应该做什么|现在.*(?:应该|适合).*做什么/.test(question)) return 'growth';
+    if (/个人画像|能力画像|梳理.*优势|可迁移能力/.test(question)) return 'profile';
+    return task;
+  }
+
+  function answerText(record) {
+    const { result } = record;
+    const parts = [result.summary];
+    for (const [key, label] of [['coreStrengths', '核心优势'], ['transferableSkills', '可迁移能力'], ['potentialDirections', '潜在发展方向'], ['skillGaps', '值得提升的能力']]) {
+      if (result.profileInsights?.[key]?.length) parts.push(`${label} ${result.profileInsights[key].join('、')}`);
     }
+    if (result.assumptions?.length) parts.push(`关键假设 ${result.assumptions.join('；')}`);
+    for (const branch of result.branches || []) {
+      parts.push(`## ${branch.title}`, branch.description, `推荐依据 ${branch.reason}`,
+        `能力缺口 ${branch.skillGaps.join('、')}`, `下一步 ${branch.nextActions.join('、')}`);
+      for (const stage of branch.stages || []) parts.push(`${stage.title} ${stage.actions.join('、')}`);
+    }
+    for (const item of result.comparison || []) parts.push(`${item.routeTitle} ${item.tradeoff}`,
+      ...item.dimensions.map(dimension => `${dimensions[dimension.dimension]} ${dimension.assessment}`));
+    if (result.priorityIssue) parts.push(result.priorityIssue);
+    for (const item of result.actions || []) parts.push(`${item.action}（${item.purpose}）`);
+    if (result.nextActions?.length) parts.push('下一步行动', ...result.nextActions.map(item => `- ${item}`));
+    if (result.firstAction) parts.push(`现在最值得做的第一件事 ${result.firstAction}`);
+    if (result.immediateTask && result.immediateTask !== result.firstAction) parts.push(`现在就能完成 ${result.immediateTask}`);
+    if (result.followUpQuestion) parts.push(result.followUpQuestion);
+    return parts.filter(Boolean).join('\n\n');
+  }
+
+  function conversationHistory(beforeIndex) {
+    const messages = (session?.messages || []).slice(0, beforeIndex);
+    const history = [];
+    for (const item of messages) {
+      if (item.role !== 'user') continue;
+      const answer = messages.findLast(candidate => candidate.role === 'assistant' && candidate.status === 'completed' && candidate.metadata?.replyTo === item.id);
+      if (!answer) continue;
+      const followUp = answer.metadata?.record?.result?.followUpQuestion;
+      const content = followUp && answer.content.length > 1200
+        ? answer.content.slice(0, 1198 - followUp.length) + '\n\n' + followUp : answer.content.slice(0, 1200);
+      history.push({ role: 'user', content: item.content.slice(0, 1200) }, { role: 'assistant', content });
+    }
+    return history.slice(-8);
+  }
+
+  async function run({ opportunityMode = false, explicitQuestion, regenerate, retry, forceTask } = {}) {
+    if (request || importing) return;
+    const question = explicitQuestion || message.value.trim();
+    if (!question) return message.focus();
+    if (!session && !createSession({ prompt: question, nextTask: task, inheritContext: true })) return;
+    const skipReply = /^(?:跳过(?:这题|这个问题)?|不想(?:说|回答|透露)|暂不(?:提供|回答|透露)|不方便(?:回答|透露)|以后再说)[。！!]?$/u.test(question);
+    const newTaskRequest = /(?:请|帮我|直接|先给|不必|不用|不要).*(?:规划|计划|路线|分析|比较|建议|方向|画像|提问|反问)|(?:不必|不用|不要).*(?:问|填)/.test(question);
+    const profileReply = !explicitQuestion && !regenerate && !retry && !skipReply && !newTaskRequest ? pendingProfileField() : null;
+    const saveProfileReply = profileReply && (profileReply === 'experience.text' || question.length <= 2000);
+    const nextTask = forceTask || (regenerate ? regenerate.metadata.record.result.task : retry?.metadata.task || (profileReply ? task : inferTask(question)));
+    if (nextTask !== task) selectTask(nextTask);
     let routes = ['compare', 'plan', 'growth'].includes(task) ? [...selectedRoutes.values()] : [];
+    if (regenerate) routes = regenerate.metadata.record.routes || [];
+    if (retry) routes = retry.metadata.routes || [];
     if (opportunityMode && byId('ciUseHistory').checked) {
       const savedPlan = records().find(record => record.result?.task === 'plan' && record.result.branches?.some(branch => !record.excludedBranches?.includes(branch.id)));
       const branch = savedPlan?.result.branches.find(item => !savedPlan.excludedBranches?.includes(item.id));
       if (branch) routes = [branchContext(`${savedPlan.id}_${branch.id}`, branch)];
     }
-    if (task === 'compare' && routes.length === 1) return status('ciStatus', '请再选一条路线，或取消勾选后直接描述两个选项。', true);
-    const liveSearch = byId('ciLive').checked;
+    if (task === 'plan') routes = routes.slice(0, 1);
+    const singleComparison = task === 'compare' && routes.length === 1 ? routes[0] : null;
+    if (singleComparison) routes = [];
+    const liveSearchRequested = byId('ciLive').checked;
     const publicSearchQuery = byId('ciPublicQuery').value.trim();
-    if (liveSearch && !publicSearchQuery) {
-      byId('ciPublicQuery').focus();
-      return status('ciStatus', '请填写用于实时检索的公开搜索词。', true);
-    }
+    const liveSearch = liveSearchRequested && Boolean(publicSearchQuery);
     const local = localData();
-    const history = byId('ciUseHistory').checked ? historyContext(local) : [];
-    const clarification = continuation ? [
-      ...(continuation.clarification || []),
-      { role: 'user', content: continuation.question.slice(0, 1400) },
-      { role: 'assistant', content: `${continuation.result.summary}\n${continuation.result.followUpQuestion}`.slice(0, 1400) },
-    ].slice(-8) : [];
-    history.push(...clarification);
-    const researchEnabled = byId('ciResearch').checked || liveSearch;
-    const nodeContext = focusNode && { title: focusNode.title, description: focusNode.description, parentTitle: focusNode.parentTitle };
+    const previous = regenerate || retry;
+    const oldUser = previous && session.messages.find(item => item.id === previous.metadata.replyTo);
+    const beforeIndex = oldUser ? session.messages.indexOf(oldUser) : session.messages.length;
+    const currentHistory = conversationHistory(beforeIndex);
+    const externalHistory = byId('ciUseHistory').checked ? historyContext(local) : [];
+    const history = externalHistory.length
+      ? [...externalHistory.slice(-2), ...currentHistory.slice(-6)] : currentHistory;
+    const node = previous ? previous.metadata.focusNode || null : focusNode;
+    const analysisFocus = node || singleComparison;
     const body = {
       task, message: question, routes,
-      profile: byId('ciUseProfile').checked ? profileContext(local) : undefined,
-      history: history.slice(-8), researchEnabled, liveSearch,
+      history, researchEnabled: byId('ciResearch').checked || liveSearchRequested, liveSearch,
       publicSearchQuery: liveSearch ? publicSearchQuery : undefined,
       documents: byId('ciResearch').checked ? documents.filter(item => item.text.trim()).map(({ title, text, kind, locator }) => ({ title, text, kind, locator })) : undefined,
-      focusNode: nodeContext || undefined,
+      focusNode: analysisFocus ? { title: analysisFocus.title, description: analysisFocus.description, parentTitle: analysisFocus.parentTitle || '' } : undefined,
       challengeMode: byId('ciChallenge').checked, opportunityMode,
     };
-    const submitted = { id: crypto.randomUUID(), question, createdAt: new Date().toISOString(), clarification, routes,
-      ...(focusNode ? { treeTarget: { treeId: focusNode.treeId, nodeId: focusNode.nodeId } } : {}),
-    };
+    const createdAt = new Date().toISOString();
+    const user = oldUser || { id: crypto.randomUUID(), role: 'user', content: question, status: 'completed', createdAt,
+      ...(saveProfileReply ? { metadata: { profileReply } } : {}),
+      attachments: documents.map(({ id, title }) => ({ id, title })) };
+    const submitted = { id: crypto.randomUUID(), question, createdAt, routes };
+    const assistant = { id: submitted.id, role: 'assistant', content: '', status: 'generating', createdAt,
+      metadata: { replyTo: user.id, focusNode: analysisFocus || null, task, routes, ...(regenerate ? { regeneratedFrom: regenerate.id } : {}) } };
+    if (!oldUser) session.messages.push(user);
+    session.messages.push(assistant);
+    if (!persistSession()) {
+      session.messages = session.messages.filter(item => item.id !== assistant.id && (oldUser || item.id !== user.id));
+      return;
+    }
+    const sessionId = session.id;
     const controller = new AbortController();
-    request = controller;
-    byId('ciSubmit').disabled = true;
-    byId('ciSubmit').textContent = '正在分析…';
-    status('ciStatus', '正在整理分析，请稍候。');
+    request = { controller, sessionId, assistantId: assistant.id };
+    if (!explicitQuestion && !regenerate) message.value = '';
+    persistSession();
+    renderThread(true);
+    resizeComposer();
+    byId('ciContext').open = false;
+    status('ciStatus', window.CareerProfile.state === 'loading' ? '正在读取已保存资料…' : '正在梳理你的问题…');
+    let profileSaveWarning = liveSearchRequested && !liveSearch ? '本次先用已有资料分析。填写公开搜索词后可继续核实实时信息。' : '';
     try {
+      const field = user.metadata?.profileReply;
+      await window.CareerProfile.ready;
+      if (controller.signal.aborted) return;
+      if (field && !regenerate && !user.metadata.profileSaved && !hasProfileAnswer(field)) {
+        try {
+          const { storage } = await window.CareerProfile.saveField(field, question);
+          if (controller.signal.aborted || session?.id !== sessionId) return;
+          session.messages.find(item => item.id === user.id).metadata.profileSaved = storage;
+          persistSession();
+          renderThread();
+        } catch {
+          profileSaveWarning = '这项资料暂未保存，本次仍会根据你刚提供的信息给出建议。';
+        }
+      }
+      if (controller.signal.aborted || session?.id !== sessionId) return;
+      syncProfileChoice();
+      refreshSettings();
+      const useProfile = byId('ciUseProfile').checked;
+      const localConsent = useProfile && localProfileConsent().granted === true;
+      body.profileUsage = { enabled: useProfile, localConsent };
+      if (localConsent) {
+        const localProfile = profileContext();
+        if (Object.keys(localProfile.fields).length) body.profile = localProfile;
+      }
       const response = await fetch('/api/journey/career-intelligence', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: controller.signal,
       });
       const data = await response.json().catch(() => null);
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || session?.id !== sessionId) return;
       if (!response.ok || !data?.summary || data.task !== body.task) {
         const error = typeof data?.error === 'string' ? data.error : data?.error?.message;
-        throw new Error(error || data?.message || '职业规划 AI 暂不可用，请稍后再试。');
+        throw Object.assign(new Error(error || data?.message || '职业规划 AI 暂不可用，请稍后重试。'),
+          { profileDiagnostics: data?.profileDiagnostics });
       }
+      const target = session.messages.find(item => item.id === assistant.id);
+      if (!target || target.status !== 'generating') return;
       turn = { ...submitted, result: data };
-      if (task === body.task) {
-        if (!explicitQuestion && message.value.trim() === question) message.value = '';
-        continuation = null;
-      }
-      renderResult(true);
+      target.status = 'completed';
+      target.content = answerText(turn);
+      target.metadata.record = turn;
+      const saved = persistSession();
+      renderThread(true);
       renderRouteInput();
-      status('ciStatus', '分析已生成。');
+      if (saved) status('ciStatus', profileSaveWarning, Boolean(profileSaveWarning));
     } catch (error) {
-      if (!controller.signal.aborted) status('ciStatus', error instanceof TypeError ? '连接失败，输入仍保留，可以重试。' : error.message, true);
-    } finally {
-      if (request === controller) {
-        request = null;
-        byId('ciSubmit').disabled = false;
-        byId('ciSubmit').textContent = tasks[task][1];
+      if (!controller.signal.aborted && session?.id === sessionId) {
+        const target = session.messages.find(item => item.id === assistant.id);
+        target.status = 'failed';
+        target.error = error instanceof TypeError ? '连接失败，请稍后重试。' : error.message;
+        if (error.profileDiagnostics) target.metadata.profileDiagnostics = error.profileDiagnostics;
+        const saved = persistSession();
+        renderThread(true);
+        if (saved) status('ciStatus', target.error, true);
       }
+    } finally {
+      if (request?.controller === controller) request = null;
+      resizeComposer();
     }
   }
 
@@ -297,13 +709,66 @@
     for (const item of value) add(list, 'li', item);
   }
 
+  function renderProfileDiagnostics(parent, diagnostics) {
+    if (!diagnostics) return;
+    const section = add(parent, 'details', '', 'ci-profile-diagnostics');
+    add(section, 'summary', '本次个人资料引用');
+    const labels = {
+      available: '已成功读取个人资料',
+      empty: '当前资料库没有可用资料',
+      not_requested: '本次未引用个人资料',
+      not_authorized: '尚未授权在线 AI 使用个人资料',
+      not_connected: '尚未连接统一资料',
+      session_expired: '访客身份已失效',
+      storage_unavailable: '统一资料服务暂不可用',
+      load_failed: '个人资料读取失败',
+    };
+    const connectionLabels = {
+      connected: '已连接统一资料数据库',
+      not_connected: '尚未连接统一资料数据库',
+      session_expired: '访客身份已失效，统一资料数据库未连接',
+      storage_unavailable: '统一资料存储暂不可用',
+      load_failed: '统一资料数据库读取失败',
+    };
+    const failedConnection = ['not_connected', 'session_expired', 'storage_unavailable', 'load_failed'].includes(diagnostics.connectionStatus);
+    const stateLabel = diagnostics.status === 'empty' && failedConnection ? connectionLabels[diagnostics.connectionStatus] :
+      labels[diagnostics.status] || '已记录本次资料读取状态';
+    add(section, 'p', stateLabel);
+    if (diagnostics.connectionStatus && diagnostics.connectionStatus !== 'connected') {
+      add(section, 'p', '统一资料连接 · ' + (connectionLabels[diagnostics.connectionStatus] || '未连接'));
+    }
+    const list = add(section, 'dl');
+    for (const [label, key] of [['教育背景', 'educationCount'], ['项目与科研经历', 'experienceCount'],
+      ['技能信息', 'skillCount'], ['职业偏好', 'preferenceCount'], ['资料字段', 'fieldCount'],
+      ['历史消息', 'historyCount'], ['上下文字符', 'totalCharacters']]) {
+      if (!Number.isFinite(diagnostics[key])) continue;
+      const row = add(list, 'div');
+      add(row, 'dt', label);
+      add(row, 'dd', String(diagnostics[key]));
+    }
+    const sources = { sqlite: '统一资料数据库', browser: '获准的本浏览器资料', mixed: '统一资料数据库与获准的本机资料', none: '本次未引用' };
+    add(section, 'p', '资料来源 · ' + (sources[diagnostics.source] || '已授权资料'));
+    const delivery = diagnostics.usedByModel ? '资料已随本次请求发送给 AI' :
+      diagnostics.profileAvailable && diagnostics.modelRequestSent ? '已尝试携带资料发送，尚未收到模型响应' :
+      diagnostics.modelRequestSent ? '已请求 AI，本次未引用个人资料' : '尚未发出模型请求';
+    add(section, 'p', '资料状态 · ' + delivery);
+    if (diagnostics.truncatedFields?.length) {
+      const fields = [...new Set(diagnostics.truncatedFields.map(item => typeof item === 'string' ? item : item.field))];
+      add(section, 'p', '长文本已按上下文预算选取相关片段 · ' + fields.map(field => profileLabels[field] || '经历资料').join('、'));
+    }
+    if (diagnostics.conflictCount > 0) add(section, 'p', '检测到 ' + diagnostics.conflictCount + ' 项来源差异，已优先采用本人确认或纠正的资料。');
+    if (diagnostics.requestId) add(section, 'p', '请求编号 · ' + diagnostics.requestId);
+    if (diagnostics.usedByModel) add(section, 'p', '这些统计说明资料已发送。若回答仍未体现，可用请求编号定位本次处理。');
+  }
+
   function evidenceRefs(parent, ids, evidence) {
     const matched = [...new Set(ids || [])].map(id => evidence.findIndex(source => source.sourceId === id)).filter(index => index >= 0);
     if (!matched.length) return;
     const refs = add(parent, 'span', ' · 依据 ', 'ci-muted');
     for (const index of matched) button(refs, `[${index + 1}] `, () => {
-      byId('ciSourceList').open = true;
-      const source = byId(`ciSource${index}`);
+      const article = parent.closest('.ci-message-assistant');
+      article.querySelector('.ci-sources').open = true;
+      const source = article.querySelector(`[data-source-index="${index}"]`);
       source.focus();
       source.scrollIntoView({ block: 'nearest' });
     });
@@ -318,6 +783,8 @@
     renderRouteInput();
     if (!message.value.trim() && nextTask !== 'growth') message.value = nextTask === 'plan' ? `请为「${branch.title}」制定阶段计划。` : '请比较已选路线的取舍、能力缺口和转向成本。';
     if (nextTask !== 'compare' || selectedRoutes.size > 1) message.focus();
+    resizeComposer();
+    persistSession();
     status('ciStatus', nextTask === 'compare' ? `已选 ${selectedRoutes.size} 条路线。` : '已选定路线。');
   }
 
@@ -338,7 +805,9 @@
       ['主要风险', branch.risks], ['预计时间', branch.timeCost], ['经济成本', branch.economicCost],
       ['机会成本', branch.opportunityCost], ['转向灵活性', branch.flexibility],
     ]) detail(extra, label, value);
-    for (const stage of branch.stages || []) detail(extra, [stages[stage.timeframe], stage.title].filter(Boolean).join(' · '), stage.actions);
+    const stageLabels = branch.planningHorizon === 'three_year' ? threeYearStages : stages;
+    for (const stage of branch.stages || []) detail(record.result.task === 'plan' ? article : extra,
+      [stageLabels[stage.timeframe], stage.title].filter(Boolean).join(' · '), stage.actions);
     const actions = add(article, 'div', '', 'ci-inline-actions');
     const excluded = record.excludedBranches?.includes(branch.id);
     if (!excluded) {
@@ -354,9 +823,11 @@
         record.excludedBranches = excludedBranches;
         if (!excluded) selectedRoutes.delete(`${record.id}_${branch.id}`);
         renderRouteInput();
-        renderResult();
-        status('ciResultStatus', excluded ? '已恢复此方向。' : '已记录为暂不考虑。');
-      } catch { status('ciResultStatus', '当前浏览器无法保存记录。', true); }
+        const current = session?.messages.find(item => item.id === record.id);
+        if (current) { current.metadata.record = record; persistSession(); }
+        renderThread();
+        recordStatus(record, excluded ? '已恢复此方向。' : '已记录为暂不考虑。');
+      } catch { recordStatus(record, '当前浏览器无法保存记录。', true); }
     });
   }
 
@@ -383,11 +854,17 @@
     const row = add(tbody, 'tr');
     add(row, 'th', '主要取舍').scope = 'row';
     for (const item of items) add(row, 'td', item.tradeoff || '未知');
+    if (items.some(item => item.riskAssessment)) {
+      const riskRow = add(tbody, 'tr');
+      add(riskRow, 'th', '风险与适用情景').scope = 'row';
+      for (const item of items) add(riskRow, 'td', item.riskAssessment || '待验证');
+    }
   }
 
   function renderSources(parent, evidence, research) {
     const section = add(parent, 'details', '', 'ci-sources');
-    section.id = 'ciSourceList';
+    section.dataset.sourceList = '';
+    if (evidence.length) button(parent, '查看资料来源', () => { section.open = !section.open; });
     add(section, 'summary', `依据与检索状态${evidence.length ? `（${evidence.length}）` : ''}`);
     const researchMessages = Array.isArray(research?.warnings) ? research.warnings : [];
     if (research?.message) add(section, 'p', research.message, 'ci-muted');
@@ -396,7 +873,7 @@
     const list = add(section, 'ol');
     for (const [index, source] of evidence.entries()) {
       const item = add(list, 'li');
-      item.id = `ciSource${index}`;
+      item.dataset.sourceIndex = String(index);
       item.tabIndex = -1;
       if (/^https:\/\//i.test(source.url || '')) {
         const link = add(item, 'a', source.title || '查看来源');
@@ -412,31 +889,107 @@
     }
   }
 
-  function renderResult(focus = false) {
-    if (!turn) return;
-    const record = turn;
+  function renderInline(parent, content) {
+    const expression = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\(https?:\/\/[^\s)]+\))/g;
+    let position = 0;
+    for (const match of content.matchAll(expression)) {
+      parent.append(document.createTextNode(content.slice(position, match.index)));
+      const token = match[0];
+      if (token.startsWith('`')) add(parent, 'code', token.slice(1, -1));
+      else if (token.startsWith('**')) add(parent, 'strong', token.slice(2, -2));
+      else if (token.startsWith('*')) add(parent, 'em', token.slice(1, -1));
+      else {
+        const parts = token.match(/^\[([^\]]+)\]\((.+)\)$/);
+        const link = add(parent, 'a', parts[1]);
+        link.href = parts[2];
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+      }
+      position = match.index + token.length;
+    }
+    parent.append(document.createTextNode(content.slice(position)));
+  }
+
+  function renderMarkdown(parent, content) {
+    const lines = String(content || '').split('\n');
+    let list = null;
+    let code = null;
+    let table = null;
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index];
+      if (/^\s*```/.test(line)) {
+        list = table = null;
+        code = code ? null : add(add(parent, 'pre'), 'code');
+        continue;
+      }
+      if (code) { code.append(document.createTextNode(`${line}\n`)); continue; }
+      if (!line.trim()) { list = table = null; continue; }
+      const heading = line.match(/^(#{1,6})\s+(.+)$/);
+      if (heading) { renderInline(add(parent, `h${Math.min(6, heading[1].length + 2)}`), heading[2]); list = table = null; continue; }
+      const isTableHeader = line.includes('|') && /^\s*\|?\s*:?-+:?\s*\|/.test(lines[index + 1] || '');
+      if (isTableHeader || (table && line.includes('|'))) {
+        if (isTableHeader) {
+          table = add(add(parent, 'div', '', 'ci-table-scroll'), 'table', '', 'ci-comparison');
+          list = null;
+        }
+        const row = add(table, 'tr');
+        for (const cell of line.trim().replace(/^\||\|$/g, '').split('|')) renderInline(add(row, isTableHeader ? 'th' : 'td'), cell.trim());
+        if (isTableHeader) index += 1;
+        continue;
+      }
+      table = null;
+      const item = line.match(/^\s*(?:([-*+])|(\d+)\.)\s+(.+)$/);
+      if (item) {
+        const tag = item[2] ? 'OL' : 'UL';
+        if (!list || list.tagName !== tag) list = add(parent, tag.toLowerCase());
+        renderInline(add(list, 'li'), item[3]);
+        continue;
+      }
+      list = null;
+      renderInline(add(parent, line.startsWith('> ') ? 'blockquote' : 'p'), line.replace(/^> /, ''));
+    }
+  }
+
+  function recordStatus(record, text, error = false) {
+    const node = byId(`ciTurn-${record.id}`)?.querySelector('[data-result-status]');
+    if (!node) return status('ciStatus', text, error);
+    node.textContent = text;
+    node.dataset.error = String(error);
+  }
+
+  function renderResult(record, parent) {
     const { result } = record;
     const evidence = result.evidence || [];
-    results.replaceChildren();
-    results.hidden = false;
-    const header = add(results, 'div', '', 'ci-result-heading');
-    const heading = add(header, 'h2', result.status === 'needs_input' ? '还需要确认一件事' : `${tasks[result.task][0]} · 分析结果`);
-    heading.tabIndex = -1;
-    const actions = add(header, 'div', '', 'ci-result-actions');
-    button(actions, '保存分析', () => {
-      try { writeRecord(record); status('ciResultStatus', '已保存到我的规划记录。'); }
-      catch { status('ciResultStatus', '当前浏览器无法保存分析。', true); }
-    }, 'ci-button ci-button-light');
-    if (result.branches?.length) button(actions, '选择写入职业树', () => openTreeDialog(record), 'ci-button ci-button-primary');
-    if (record.treeHref) add(actions, 'a', '查看职业树节点 ↗', 'ci-button ci-button-light').href = record.treeHref;
-    const resultStatus = add(results, 'p', '', 'ci-status');
-    resultStatus.id = 'ciResultStatus';
+    const actions = add(parent, 'div', '', 'ci-message-actions');
+    button(actions, '复制', async () => {
+      try { await navigator.clipboard.writeText(answerText(record)); recordStatus(record, '已复制'); }
+      catch { recordStatus(record, '复制失败，可选中文字复制。', true); }
+    });
+    const sourceMessage = session?.messages.find(item => item.id === record.id);
+    if (sourceMessage) button(actions, '重新生成', () => {
+      if (request) return status('ciStatus', '请先停止当前生成。', true);
+      run({ explicitQuestion: record.question, regenerate: sourceMessage });
+    });
+    button(actions, '保存为规划记录', () => {
+      try { writeRecord(record); recordStatus(record, '已保存到我的规划记录'); }
+      catch { recordStatus(record, '当前浏览器无法保存分析。', true); }
+    });
+    const resultStatus = add(parent, 'p', '', 'ci-status');
+    resultStatus.dataset.resultStatus = '';
     resultStatus.setAttribute('role', 'status');
-    add(results, 'p', record.question, 'ci-muted');
-    add(results, 'p', result.summary, 'ci-answer');
+    const answer = add(parent, 'div', '', 'ci-message-content');
+    const contextUsed = result.contextAvailability;
+    const labels = [];
+    if (contextUsed?.profile?.status === 'available') labels.push('已参考个人画像');
+    if (contextUsed?.history?.status === 'available') labels.push('已参考当前资料与对话');
+    if (contextUsed?.documents?.status === 'available') labels.push('已参考上传资料');
+    if (labels.length) add(answer, 'p', labels.join(' · '), 'ci-muted');
+    renderMarkdown(add(answer, 'div', '', 'ci-answer'), result.summary);
     const insights = result.profileInsights || {};
+    detail(answer, '关键假设', result.assumptions);
+    for (const [label, key] of [['核心优势', 'coreStrengths'], ['可迁移能力', 'transferableSkills'], ['潜在发展方向', 'potentialDirections'], ['值得提升的能力', 'skillGaps']]) detail(answer, label, insights[key]);
     if (Object.values(insights).some(items => items?.length)) {
-      const profile = add(results, 'details', '', 'ci-detail');
+      const profile = add(answer, 'details', '', 'ci-detail');
       add(profile, 'summary', '画像依据与待确认信息');
       detail(profile, '用户自述', insights.selfReported);
       detail(profile, 'AI 推断', insights.inferred);
@@ -445,30 +998,88 @@
         const line = detail(profile, '资料所载', entry.statement);
         if (line) evidenceRefs(line, entry.evidenceIds, evidence);
       }
+      if (insights.selfReported?.length || insights.documented?.length) button(profile, '编辑个人资料', () => openDialog('ciProfileDialog'));
     }
     if (result.branches?.length) {
-      const grid = add(results, 'div', '', 'ci-branches');
+      const grid = add(answer, 'div', '', 'ci-branches');
       for (const branch of result.branches) renderBranch(grid, branch, record, evidence);
     }
-    renderComparison(results, result.comparison, evidence);
-    detail(results, '下一步行动', result.nextActions);
+    renderComparison(answer, result.comparison, evidence);
+    if (result.actions?.length) {
+      detail(answer, '当前最值得优先解决的问题', result.priorityIssue);
+      detail(answer, '接下来可以做什么', result.actions.map(item => `${item.action}（${item.purpose}）`));
+    } else detail(answer, '下一步行动', result.nextActions);
+    detail(answer, '现在最值得做的第一件事', result.firstAction);
+    if (result.immediateTask !== result.firstAction) detail(answer, '现在就能完成的小任务', result.immediateTask);
     if (result.followUpQuestion) {
-      const next = add(results, 'div', '', 'ci-follow-up');
-      add(next, 'strong', '继续想一想');
-      add(next, 'p', result.followUpQuestion);
-      button(next, '回答这个问题', () => {
-        selectTask(result.task);
-        continuation = record;
-        selectedRoutes.clear();
-        for (const route of record.routes || []) selectedRoutes.set(route.id, route);
-        renderRouteInput();
-        message.placeholder = result.followUpQuestion;
-        message.focus();
-        status('ciStatus', `继续回答：${result.followUpQuestion}`);
-      });
+      const next = add(answer, 'div', '', 'ci-follow-up');
+      const isLatest = session?.messages.at(-1)?.id === record.id;
+      if (isLatest && Object.hasOwn(profileLabels, result.profileField) && hasProfileAnswer(result.profileField)) {
+        add(next, 'p', `你的个人资料中已有「${profileLabels[result.profileField]}」。`);
+        button(next, '参考已保存的资料继续', async () => {
+          if (request) return;
+          if (!await enableProfileUse()) return;
+          run({ explicitQuestion: '请参考我已保存的个人资料，继续分析刚才的问题。', forceTask: result.task });
+        });
+      } else {
+        add(next, 'p', result.followUpQuestion);
+        button(next, '继续回答', () => {
+          if (!isLatest && pendingProfileField()) byId('ciSkipProfileReply').click();
+          selectTask(result.task);
+          selectedRoutes.clear();
+          for (const route of record.routes || []) selectedRoutes.set(route.id, route);
+          renderRouteInput();
+          message.placeholder = result.followUpQuestion;
+          message.focus();
+        });
+      }
     }
-    renderSources(results, evidence, result.researchStatus);
-    if (focus && byId('step8').classList.contains('active')) heading.focus();
+    renderSources(answer, evidence, result.researchStatus);
+    renderProfileDiagnostics(answer, result.profileDiagnostics);
+    parent.append(actions, resultStatus);
+  }
+
+  function renderThread(scroll = false) {
+    showProfileReply();
+    const parent = byId('ciMessages');
+    const scroller = byId('ciThread');
+    const previousTop = scroller.scrollTop;
+    parent.replaceChildren();
+    const items = session?.messages || [];
+    byId('ciWelcome').hidden = items.length > 0;
+    parent.hidden = !items.length;
+    byId('ciChatMain').classList.toggle('is-chat', items.length > 0);
+    if (items.length) byId('ciChatMain').append(byId('ciComposeArea'));
+    else byId('ciWelcome').querySelector('.ci-suggestions-section').before(byId('ciComposeArea'));
+    byId('ciChatTitle').textContent = session?.title || '新对话';
+    for (const item of items) {
+      const article = add(parent, 'article', '', `ci-message ci-message-${item.role}`);
+      article.id = `ciTurn-${item.id}`;
+      article.tabIndex = -1;
+      article.setAttribute('aria-label', item.role === 'user' ? '你的消息' : 'AI 回答');
+      add(article, 'span', item.role === 'user' ? '你' : '星轨', 'ci-message-author');
+      if (item.role === 'user') {
+        add(article, 'div', item.content, 'ci-message-content');
+        if (item.metadata?.profileSaved && Object.hasOwn(profileLabels, item.metadata.profileReply)) {
+          const where = item.metadata.profileSaved === 'cloud' ? '统一资料' : '本浏览器';
+          add(article, 'small', `${profileLabels[item.metadata.profileReply]}已保存到${where}`, 'ci-muted');
+        }
+        if (item.attachments?.length) {
+          const files = add(article, 'div', '', 'ci-message-attachments');
+          for (const attachment of item.attachments) add(files, 'span', attachment.title, 'ci-source-tag');
+        }
+      } else if (item.status === 'completed' && item.metadata?.record) renderResult(item.metadata.record, article);
+      else {
+        const text = item.status === 'generating' ? '正在结合你的问题梳理思路…' : item.error || (item.status === 'interrupted' ? '上次生成已中断，可以重试。' : '已停止生成。');
+        add(article, 'p', text, item.status === 'generating' ? 'ci-message-pending' : 'ci-muted');
+        if (item.status !== 'generating') button(article, '重试', () => {
+          const user = session.messages.find(candidate => candidate.id === item.metadata?.replyTo);
+          if (user) run({ explicitQuestion: user.content, retry: item });
+        });
+        renderProfileDiagnostics(article, item.metadata?.profileDiagnostics);
+      }
+    }
+    requestAnimationFrame(() => { scroller.scrollTop = scroll ? scroller.scrollHeight : previousTop; });
   }
 
   function renderDocuments() {
@@ -482,12 +1093,12 @@
       text.maxLength = 20000;
       text.rows = 4;
       text.setAttribute('aria-label', `${entry.title} 提取的文字`);
-      text.addEventListener('input', () => { entry.text = text.value; });
+      text.addEventListener('input', () => { entry.text = text.value; persistSession(); });
       const controls = add(card, 'div', '', 'ci-inline-actions');
       button(controls, '保存至此浏览器', () => {
         if (!entry.text.trim()) return status('ciStatus', '请先填写要保存的资料内容。', true);
         try {
-          const saved = readArray(documentKey).filter(item => item.id !== entry.id);
+          const saved = readArray(documentKey, true).filter(item => item.id !== entry.id);
           if (saved.length >= 3) return status('ciStatus', '已保存 3 份资料。请先移除一份。', true);
           localStorage.setItem(documentKey, JSON.stringify([...saved, entry]));
           status('ciStatus', '已保存这份资料的文字。');
@@ -495,12 +1106,23 @@
       });
       button(controls, '移除', () => {
         try {
-          const saved = readArray(documentKey);
+          const saved = readArray(documentKey, true);
           if (saved.some(item => item.id === entry.id)) localStorage.setItem(documentKey, JSON.stringify(saved.filter(item => item.id !== entry.id)));
           documents = documents.filter(item => item.id !== entry.id);
+          persistSession();
           renderDocuments();
           status('ciStatus', '已移除资料。');
         } catch { status('ciStatus', '当前浏览器无法移除资料。', true); }
+      });
+    }
+    for (const saved of readArray(documentKey).filter(item => !documents.some(entry => entry.id === item.id))) {
+      button(parent, `使用已保存资料 · ${saved.title}`, () => {
+        if (importing) return status('ciStatus', '请等当前文件解析完成后再添加资料。', true);
+        if (documents.length >= 3) return status('ciStatus', '一次最多使用 3 份个人资料。', true);
+        if (!session && !createSession({ prompt: message.value, nextTask: task, inheritContext: true })) return;
+        documents.push(saved);
+        persistSession();
+        renderDocuments();
       });
     }
   }
@@ -513,179 +1135,123 @@
       input.value = '';
       return status('ciStatus', '一次最多使用 3 份个人资料，请先移除不需要的资料。', true);
     }
+    if (!session && !createSession({ prompt: message.value, nextTask: task, inheritContext: true })) return;
+    if (!persistSession()) return;
+    const targetId = session.id;
     importing = true;
     input.disabled = true;
     status('ciStatus', '正在提取文件文字。');
     try {
       const { parseDocumentFile } = await import('/journey/documents.js');
       const failures = [];
+      const imported = [];
       for (const file of files) {
         try {
           const { id, title, text, kind, locator } = await parseDocumentFile(file, progress => status('ciStatus', progress));
-          documents.push({ id, title, text, kind, locator });
+          imported.push({ id, title, text, kind, locator });
         } catch (error) { failures.push(`${file.name} · ${error.message}`); }
       }
-      renderDocuments();
-      status('ciStatus', failures.length ? failures.join('；') : '已提取文件文字。可展开核对，勾选资料检索后用于分析。', failures.length > 0);
+      const target = session?.id === targetId ? session : sessions.get(targetId);
+      if (!target) return;
+      if ((target.attachments || []).length + imported.length > 3) throw new Error('资料数量已变化，请移除不需要的资料后重新导入。');
+      target.attachments = [...(target.attachments || []), ...imported];
+      if (session?.id === targetId) {
+        documents = target.attachments;
+        persistSession();
+        renderDocuments();
+        status('ciStatus', failures.length ? failures.join('；') : '已提取文件文字。可展开核对，勾选资料检索后用于分析。', failures.length > 0);
+      } else { sessions.save(target); renderSessions(); }
     } catch { status('ciStatus', '文件解析暂不可用。可以把相关文字粘贴到问题里。', true); }
     finally {
       importing = false;
       input.disabled = false;
       input.value = '';
+      resizeComposer();
     }
-  }
-
-  function option(parent, value, label) {
-    const element = add(parent, 'option', label);
-    element.value = value;
-    return element;
-  }
-
-  function configureTreeTarget() {
-    const tree = treeDraft.trees.find(item => item.id === byId('ciTreeChoice').value);
-    const mode = byId('ciTreeMode');
-    const canUpdate = Boolean(tree?.nodes.some(node => node.id !== tree.rootNodeId));
-    mode.hidden = byId('ciTreeModeLabel').hidden = !canUpdate;
-    if (!canUpdate) mode.value = 'add';
-    const update = mode.value === 'update';
-    const select = byId('ciTreeNode');
-    const label = byId('ciTreeNodeLabel');
-    select.hidden = label.hidden = !tree;
-    label.textContent = update ? '要更新的节点' : '接到哪个节点下';
-    select.replaceChildren();
-    for (const node of tree?.nodes || []) {
-      if (update && node.id === tree.rootNodeId) continue;
-      option(select, node.id, node.id === tree.rootNodeId ? `${node.title}（起点）` : node.title);
-    }
-    if (tree && !update) select.value = tree.rootNodeId;
-    for (const { check } of treeDraft.fields) {
-      if (update && check.type !== 'radio') check.checked = false;
-      check.type = update ? 'radio' : 'checkbox';
-    }
-    if (update && !treeDraft.fields.some(({ check }) => check.checked)) treeDraft.fields[0].check.checked = true;
-    status('ciTreeStatus', update ? '更新会替换节点的名称和说明，改动标为待核实，原有来源仍可查看。' : '确认后会写入所选节点，并保存对应的规划问答。');
-  }
-
-  async function openTreeDialog(record) {
-    if (dialog.open) return;
-    try {
-      treeBridge ??= await import('/journey/career-intelligence-tree.js');
-      if (dialog.open || !byId('step8').classList.contains('active')) return;
-      const trees = treeBridge.listCareerTrees();
-      const select = byId('ciTreeChoice');
-      select.replaceChildren();
-      option(select, '', '创建新的职业树');
-      for (const tree of trees) option(select, tree.id, tree.title);
-      const target = record.treeTarget;
-      if (target && trees.some(tree => tree.id === target.treeId)) select.value = target.treeId;
-      byId('ciTreeMode').value = 'add';
-      const drafts = byId('ciDrafts');
-      drafts.replaceChildren();
-      const fields = record.result.branches.map((branch, index) => {
-        const card = add(drafts, 'fieldset', '', 'ci-draft');
-        const label = add(card, 'label');
-        const check = add(label, 'input');
-        check.type = 'checkbox';
-        check.name = 'ciDraftBranch';
-        label.append(document.createTextNode(`采用「${branch.title}」`));
-        check.checked = !record.excludedBranches?.includes(branch.id);
-        const title = add(card, 'input');
-        title.type = 'text';
-        title.value = branch.title;
-        title.maxLength = 100;
-        title.setAttribute('aria-label', `分支 ${index + 1} 名称`);
-        const description = add(card, 'textarea');
-        description.value = branch.description;
-        description.maxLength = 600;
-        description.rows = 2;
-        description.setAttribute('aria-label', `分支 ${index + 1} 说明`);
-        return { branch, check, title, description };
-      });
-      treeDraft = { record, trees, fields };
-      configureTreeTarget();
-      if (select.value && target?.nodeId) {
-        const node = byId('ciTreeNode');
-        if ([...node.options].some(item => item.value === target.nodeId)) node.value = target.nodeId;
-      }
-      dialog.showModal();
-    } catch (error) { status('ciResultStatus', `无法打开职业树：${error.message}`, true); }
-  }
-
-  function saveTree(event) {
-    event.preventDefault();
-    if (!treeDraft) return;
-    const selected = treeDraft.fields.filter(({ check }) => check.checked);
-    if (!selected.length) return status('ciTreeStatus', '请至少选择一个分支。', true);
-    if (selected.some(({ title }) => !title.value.trim())) return status('ciTreeStatus', '请填写所选分支的名称。', true);
-    const branches = selected.map(({ branch, title, description }) => ({ ...branch, title: title.value.trim(), description: description.value.trim() }));
-    const treeId = byId('ciTreeChoice').value;
-    const node = byId('ciTreeNode').value;
-    const update = Boolean(treeId && byId('ciTreeMode').value === 'update');
-    const { record } = treeDraft;
-    try {
-      const saved = treeBridge.saveCareerBranches({
-        treeId, parentNodeId: treeId && !update ? node : undefined, updateNodeId: update ? node : undefined, branches,
-        turnId: record.id, question: record.question, summary: record.result.summary, evidence: record.result.evidence,
-      });
-      record.treeHref = saved.href;
-      record.treeDecision = `我确认${update ? '更新' : '采用'}的路线：${branches.map(branch => branch.title).join('、')}`;
-      let savedHistory = true;
-      try { writeRecord(record); } catch { savedHistory = false; }
-      dialog.close();
-      renderResult();
-      status('ciResultStatus', savedHistory ? '职业树已更新，规划问答已关联。' : '职业树已更新。当前浏览器无法另外保存完整分析。', !savedHistory);
-    } catch (error) { status('ciTreeStatus', error.message, true); }
   }
 
   function cancelRequest() {
-    if (request) {
-      request.abort();
-      request = null;
-      byId('ciSubmit').disabled = false;
-      byId('ciSubmit').textContent = tasks[task][1];
-      status('ciStatus', '');
+    if (!request) return;
+    const active = request;
+    request = null;
+    active.controller.abort();
+    if (session?.id === active.sessionId) {
+      const item = session.messages.find(candidate => candidate.id === active.assistantId);
+      if (item) item.status = 'stopped';
+      persistSession();
+      renderThread();
     }
+    resizeComposer();
+    status('ciStatus', '已停止生成。');
   }
 
   function deactivate() {
     activeRoute = '';
     activation += 1;
     cancelRequest();
+    persistSession();
+    closeSidebar();
+  }
+
+  function resumeRecord(record) {
+    const existing = sessions.list().find(item => item.messages.some(message => message.metadata?.record?.id === record.id));
+    if (existing) { openSession(existing.id); focusRecord(record.id); return; }
+    if (!createSession({ nextTask: record.result.task })) return;
+    const user = { id: crypto.randomUUID(), role: 'user', content: record.question, status: 'completed', createdAt: record.createdAt };
+    session.title = record.question.trim().slice(0, 36) || '继续我的规划';
+    session.messages = [user, { id: record.id, role: 'assistant', content: answerText(record), status: 'completed', createdAt: record.createdAt,
+      metadata: { replyTo: user.id, record } }];
+    selectedRoutes.clear();
+    for (const route of record.routes || []) selectedRoutes.set(route.id, route);
+    if (persistSession()) applySession();
+    focusRecord(record.id);
+  }
+
+  function focusRecord(id) {
+    requestAnimationFrame(() => {
+      const answer = byId(`ciTurn-${id}`);
+      answer?.focus({ preventScroll: true });
+      answer?.scrollIntoView({ block: 'start' });
+    });
   }
 
   async function activate(detail, position, identifier) {
     const route = [detail, position, identifier].join('/');
     if (route === activeRoute) { renderMemory(); return; }
-    activeRoute = route;
     const current = ++activation;
     cancelRequest();
-    focusNode = null;
-    continuation = null;
-    selectedRoutes.clear();
-    byId('ciFocusNode').hidden = true;
+    if (session && !persistSession()) return;
+    activeRoute = route;
     renderMemory();
-    if (detail === 'turn') {
-      const saved = records().find(record => encodeURIComponent(record.id) === position && record.result);
-      if (saved) {
-        turn = saved;
-        selectTask(saved.result.task);
-        renderResult(true);
-        status('ciStatus', '');
-      } else {
-        turn = null;
-        results.hidden = true;
+    if (detail === 'chat' && position) {
+      const saved = sessions.get(decodeURIComponent(position));
+      if (!saved) {
+        session = null;
+        applySession();
+        history.replaceState(null, '', '/index.html#intelligence');
+        activeRoute = '//';
+        return status('ciStatus', '这条对话已删除或无法读取。', true);
+      }
+      session = saved;
+      applySession();
+    } else if (detail === 'turn') {
+      const record = records().find(item => item.id === decodeURIComponent(position || '') && item.result);
+      if (record) resumeRecord(record);
+      else {
+        session = null;
+        applySession();
         status('ciStatus', '此浏览器没有保存这条规划分析。', true);
       }
     } else if (['tree', 'compare-tree'].includes(detail) && position && identifier) {
       const comparing = detail === 'compare-tree';
-      selectTask(comparing ? 'compare' : 'explore');
+      if (!createSession({ nextTask: comparing ? 'compare' : 'explore' })) return;
       try {
-        treeBridge ??= await import('/journey/career-intelligence-tree.js');
+        const { getCareerNodeContext } = await import('/journey/career-intelligence-tree.js');
         if (current !== activation || !byId('step8').classList.contains('active')) return;
         const treeId = decodeURIComponent(position);
         const nodeIds = [...new Set(identifier.split(',').map(id => decodeURIComponent(id)))];
-        if (comparing ? nodeIds.length < 2 || nodeIds.length > 5 : nodeIds.length !== 1) throw new Error('请选择要使用的职业树节点。');
-        const nodes = nodeIds.map(id => ({ id, ...treeBridge.getCareerNodeContext(treeId, id) }));
+        if (comparing ? nodeIds.length < 2 || nodeIds.length > 5 : nodeIds.length !== 1) throw new Error('请选择要分析的发展方向。');
+        const nodes = nodeIds.map(id => ({ id, ...getCareerNodeContext(treeId, id) }));
         if (comparing) {
           for (const [index, node] of nodes.entries()) {
             const id = `tree-route-${index + 1}`;
@@ -693,30 +1259,174 @@
           }
           renderRouteInput();
         } else focusNode = { ...nodes[0], treeId, nodeId: nodes[0].id };
-        const section = byId('ciFocusNode');
-        section.replaceChildren();
-        add(section, 'span', `来自职业树 · ${nodes.map(node => node.title).join('、')}`);
-        button(section, '移除', () => {
-          window.goToStep(8);
-          status('ciStatus', '已移除职业树上下文。');
-        });
-        section.hidden = false;
-        status('ciStatus', '');
-        if (!message.value.trim()) message.value = comparing ? '请比较这些职业树节点对应的发展路线，说明主要取舍和能否并行推进。' : '基于这个节点和我的情况，有哪些值得验证的后续方向？';
+        renderFocus();
+        message.value = comparing ? '请比较这些发展路线，说明主要取舍和能否并行推进。' : '基于这个方向和我的情况，有哪些值得验证的后续方向？';
+        resizeComposer();
+        persistSession();
       } catch (error) { status('ciStatus', error.message, true); }
-    } else selectTask(Object.hasOwn(tasks, detail) ? detail : task);
+    } else {
+      session = null;
+      applySession();
+      if (Object.hasOwn(tasks, detail)) createSession({ prompt: prompts[detail], nextTask: detail });
+    }
+    const storage = sessions.state();
+    if (storage.error) status('ciStatus', storage.error.message || '聊天记录暂时无法保存。', true);
   }
 
-  for (const [key, [label]] of Object.entries(tasks)) {
-    const control = button(byId('ciTasks'), label, () => {
-      if (task !== key) cancelRequest();
-      selectTask(key);
-      status('ciStatus', '');
-    }, '');
-    control.dataset.task = key;
+  function fillProfileEditor() {
+    const field = byId('ciProfileField').value;
+    const editor = byId('ciProfileValue');
+    editor.value = window.CareerProfile.readFields()[field]?.value || '';
+    editor.maxLength = field === 'experience.text' ? 20000 : 2000;
+    byId('ciProfileValueLabel').textContent = profileLabels[field];
   }
-  byId('ciExample').onclick = () => { message.value = tasks[task][3]; message.focus(); };
-  byId('ciLive').onchange = event => { byId('ciSearchFields').hidden = !event.currentTarget.checked; };
+
+  async function openDialog(id) {
+    renderMemory();
+    closeSidebar();
+    const target = byId(id);
+    if (!target.open) target.showModal();
+    if (id === 'ciProfileDialog') {
+      const editor = byId('ciProfileValue');
+      editor.disabled = true;
+      byId('ciProfileSave').disabled = true;
+      status('ciProfileStatus', '正在读取资料…');
+      try {
+        await window.CareerProfile.ready;
+        fillProfileEditor();
+        status('ciProfileStatus', '');
+        editor.disabled = false;
+        byId('ciProfileSave').disabled = false;
+      } catch (error) { status('ciProfileStatus', error.message, true); }
+    }
+  }
+
+  function choosePrompt(nextTask) {
+    createSession({ prompt: prompts[nextTask], nextTask });
+  }
+
+  byId('ciNewChat').onclick = () => createSession();
+  byId('ciHeaderNewChat').onclick = () => createSession();
+  byId('ciShowAssistant').onclick = () => { closeSidebar(); message.focus(); };
+  byId('ciSessionSearch').addEventListener('input', renderSessions);
+  for (const control of byId('ciSuggestions').querySelectorAll('[data-ci-prompt]')) control.onclick = () => choosePrompt(control.dataset.ciPrompt);
+  byId('ciStop').onclick = cancelRequest;
+  for (const id of ['ciAttach', 'ciQuickUpload']) byId(id).onclick = () => byId('ciFile').click();
+  for (const id of ['ciShowRecords', 'ciContinuePlan']) byId(id).onclick = () => openDialog('ciRecordsDialog');
+  byId('ciShowProfile').onclick = () => openDialog('ciProfileDialog');
+  for (const [field, label] of Object.entries(profileLabels)) {
+    byId('ciProfileField').add(new Option(label, field));
+  }
+  byId('ciProfileField').onchange = () => { fillProfileEditor(); status('ciProfileStatus', ''); };
+  byId('ciProfileForm').onsubmit = async event => {
+    event.preventDefault();
+    const select = byId('ciProfileField'), editor = byId('ciProfileValue'), save = byId('ciProfileSave');
+    if (save.disabled) return;
+    select.disabled = editor.disabled = save.disabled = true;
+    try {
+      const { storage } = await window.CareerProfile.saveField(select.value, editor.value.trim() || null);
+      showProfileReply();
+      const where = storage === 'cloud' ? '统一资料' : '本浏览器';
+      status('ciProfileStatus', `已${editor.value.trim() ? '保存到' + where : '清除此项'}。`);
+    } catch (error) { status('ciProfileStatus', error.message, true); }
+    finally { select.disabled = editor.disabled = save.disabled = false; }
+  };
+  byId('ciSkipProfileReply').onclick = () => {
+    const last = session?.messages.at(-1);
+    if (!last?.metadata?.record?.result?.profileField) return;
+    last.metadata.profileReplySkipped = true;
+    persistSession();
+    showProfileReply();
+    message.focus();
+  };
+  window.addEventListener('career-profile-updated', () => { syncProfileChoice(); refreshSettings(); renderThread(); });
+  byId('ciProfileUse').onclick = async () => {
+    if (window.CareerProfile.state === 'load_failed') {
+      await window.CareerProfile.refresh();
+      syncProfileChoice();
+      refreshSettings();
+      return;
+    }
+    if (byId('ciUseProfile').checked) {
+      rememberProfileUse(false);
+      persistSession();
+    } else await enableProfileUse();
+  };
+  byId('ciProfileConsentCancel').onclick = () => byId('ciProfileConsentDialog').close('cancelled');
+  byId('ciProfileConsentAccept').onclick = async () => {
+    const accept = byId('ciProfileConsentAccept');
+    accept.disabled = true;
+    try {
+      await window.CareerProfile.ready;
+      if (window.CareerProfile.profile) await window.CareerProfile.saveAIConsent(true);
+      localStorage.setItem(profileConsentKey, JSON.stringify({
+        granted: true, notice_version: profileConsentVersion,
+        includeLegacy: byId('ciConsentIncludeLocal').checked, updated_at: new Date().toISOString(),
+      }));
+      byId('ciProfileConsentDialog').close('accepted');
+    } catch (error) {
+      status('ciProfileConsentStatus', error.message || '授权偏好未能保存，请重试。', true);
+    } finally { accept.disabled = false; }
+  };
+  byId('ciUseLocalProfile').addEventListener('change', async () => {
+    if (byId('ciUseLocalProfile').checked && !localProfileConsent().includeLegacy) {
+      await enableProfileUse(true);
+      byId('ciUseLocalProfile').checked = localProfileConsent().includeLegacy === true;
+    }
+    refreshSettings();
+    persistSession();
+  });
+  byId('ciShowSettings').onclick = () => { closeSidebar(); byId('ciContext').open = true; byId('ciSettingsButton').focus(); };
+  for (const close of document.querySelectorAll('[data-ci-close]')) close.onclick = () => close.closest('dialog').close();
+  for (const modal of [byId('ciRecordsDialog'), byId('ciProfileDialog')]) {
+    modal.addEventListener('click', event => { if (event.target.closest('a[href]')) modal.close(); });
+  }
+  byId('ciSidebarToggle').onclick = () => {
+    if (matchMedia('(max-width: 850px)').matches) {
+      const open = document.body.classList.toggle('ci-sidebar-open');
+      byId('ciSidebarToggle').setAttribute('aria-expanded', String(open));
+      byId('ciSidebarBackdrop').hidden = !open;
+      byId('ciChatMain').inert = open;
+      document.querySelector('.career-nav').inert = open;
+      document.querySelector('.career-top').inert = open;
+      byId('ciSidebar').inert = !open;
+      byId('ciSidebar').setAttribute('role', 'dialog');
+      byId('ciSidebar').setAttribute('aria-modal', String(open));
+      if (open) byId('ciSidebarClose').focus();
+    } else {
+      const collapsed = document.body.classList.toggle('ci-sidebar-collapsed');
+      byId('ciSidebarToggle').setAttribute('aria-expanded', String(!collapsed));
+      byId('ciSidebar').inert = collapsed;
+    }
+  };
+  byId('ciSidebarClose').onclick = () => { closeSidebar(); byId('ciSidebarToggle').focus(); };
+  byId('ciSidebarBackdrop').onclick = closeSidebar;
+  document.addEventListener('keydown', event => {
+    if (!document.body.classList.contains('ci-sidebar-open')) return;
+    if (event.key === 'Escape') { closeSidebar(); byId('ciSidebarToggle').focus(); }
+    if (event.key === 'Tab') {
+      const controls = [...byId('ciSidebar').querySelectorAll('a[href],button,input,summary')].filter(element => element.getClientRects().length && !element.disabled);
+      const first = controls[0], last = controls.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
+  });
+  for (const id of Object.values(optionIds)) byId(id).addEventListener('change', async () => {
+    if (id === 'ciUseProfile') {
+      if (byId(id).checked) await enableProfileUse();
+      else rememberProfileUse(false);
+    }
+    refreshSettings();
+    if (session) persistSession();
+  });
+  byId('ciPublicQuery').addEventListener('input', () => { refreshSettings(); if (session) scheduleDraft(); });
+  message.addEventListener('input', scheduleDraft);
+  message.addEventListener('keydown', event => {
+    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+      event.preventDefault();
+      run();
+    }
+  });
   byId('ciFile').addEventListener('change', importFiles);
   byId('ciForm').addEventListener('submit', event => { event.preventDefault(); run(); });
   byId('ciNoteForm').addEventListener('submit', event => {
@@ -731,21 +1441,25 @@
       field.value = '';
       status('ciMemoryStatus', '已保存记录。');
       if (discover) {
+        byId('ciProfileDialog').close();
+        if (!session && !createSession()) return;
         selectTask('explore');
-        continuation = null;
-        run({ opportunityMode: true, explicitQuestion: `这是我新增的经历或偏好：${note}\n它会带来哪些可验证的新方向？` });
+        run({ opportunityMode: true, forceTask: 'explore', explicitQuestion: `这是我新增的经历或偏好：${note}\n它会带来哪些可验证的新方向？` });
       }
     } catch { status('ciMemoryStatus', '当前浏览器无法保存记录。', true); }
   });
-  byId('ciTreeChoice').onchange = configureTreeTarget;
-  byId('ciTreeMode').onchange = configureTreeTarget;
-  byId('ciCancelTree').onclick = () => dialog.close();
-  byId('ciTreeForm').addEventListener('submit', saveTree);
-  dialog.addEventListener('close', () => { treeDraft = null; });
   window.addEventListener('storage', event => {
+    if (event.key === profileConsentKey) {
+      syncProfileChoice();
+      refreshSettings();
+    }
     if (event.key === storageKey) { renderMemory(); renderRouteInput(); }
+    if (event.key === sessions.key) { sessions.reload(); renderSessions(); }
   });
-  renderDocuments();
-  selectTask(task);
+  window.addEventListener('pagehide', () => { cancelRequest(); persistSession(); });
+  matchMedia('(max-width: 850px)').addEventListener('change', closeSidebar);
+  applySession();
+  window.CareerProfile.ready.then(() => { syncProfileChoice(); refreshSettings(); });
+  closeSidebar();
   window.CareerIntelligence = { activate, deactivate };
 })();

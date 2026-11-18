@@ -2,19 +2,145 @@
 (() => {
   'use strict';
   const NOTICE='careerP0Notice', LAST='careerP0LastIntake', PENDING='careerP0PendingProfileFields';
+  const LOCAL_FIELD = 'careerPersonalField:';
+  const fieldPaths = ['education.stage', 'education.degree', 'education.major', 'education.school',
+    'experience.text', 'skills.self_report', 'preferences.long_term_goal', 'preferences.city'];
   let csrf='',consented=false,queue=Promise.resolve(),timer=null,deleted=false,flushing=false;
+  let refreshError = null;
   const changedFields=new Map();
-  const adapter={profile:null,currentIntake:null,ready:null,refresh,update,updateMany,isEditing:path=>changedFields.has(path)};
+  const adapter={profile:null,currentIntake:null,ready:null,state:'loading',refresh,update,updateMany,readFields,readLocalFields,saveField,saveAIConsent,isEditing:path=>changedFields.has(path)};
   window.CareerProfile=adapter;
   function marker(){try{return localStorage.getItem(NOTICE)==='p0-v1';}catch{return false;}}
   function note(message,isError=false){const node=document.getElementById('careerProfileStatus');if(node){node.textContent=message;node.style.color=isError?'#b91c1c':'#475569';}}
-  async function request(path,method='GET',body){const response=await fetch('/api'+path,{method,credentials:'same-origin',cache:'no-store',headers:{...(method!=='GET'?{'Content-Type':'application/json','X-CSRF-Token':csrf}:{})},...(method!=='GET'?{body:JSON.stringify(body??{})}:{})});let payload;try{payload=await response.json();}catch{throw new Error('统一资料服务暂不可用，请保留当前文字。');}if(!response.ok){const error=new Error(payload.error?.message||'统一资料保存失败。');error.status=response.status;throw error;}return payload;}
+  async function request(path,method='GET',body){const response=await fetch('/api'+path,{method,credentials:'same-origin',cache:'no-store',headers:{...(method!=='GET'?{'Content-Type':'application/json','X-CSRF-Token':csrf}:{})},...(method!=='GET'?{body:JSON.stringify(body??{})}:{})});let payload;try{payload=await response.json();}catch{throw new Error('统一资料服务暂不可用，请保留当前文字。');}if(!response.ok){const error=new Error(payload.error?.message||'统一资料保存失败。');error.status=response.status;error.code=payload.error?.code;throw error;}return payload;}
   async function ensureSession(){if(csrf)return;if(!consented&&!marker()){if(!confirm('启用统一资料云保存后，你接下来主动修改的公共资料会保存在服务器，并供方向探索、岗位匹配、JD 分析和求职冲刺复用。旧资料不会自动上传；管理员仅在你预览并明确提交后可见。在线 AI 仅在轻量入口主动生成时调用。是否继续？'))throw new Error('本次修改仍保留在本页，尚未上传。');}const session=await request('/guest-session','POST',{consent:true,notice_version:'p0-v1'});csrf=session.csrf_token;consented=true;deleted=false;adapter.profile=session.profile;try{localStorage.setItem(NOTICE,'p0-v1');}catch{/* Memory-only notice state remains valid. */}}
   function known(path){const field=adapter.profile?.fields?.[path];if(field?.value===null&&field.source_type==='user_form')return '';return field?.value_state==='known'&&field.source_type!=='ai_inference'?field.value:null;}
+  function localRecord(key) {
+    try { return JSON.parse(localStorage.getItem(key)); }
+    catch { return null; }
+  }
+  function userField(value) {
+    return {value, value_state: value === null ? 'unknown' : 'known', source_type: 'user_form', confirmation_state: 'corrected'};
+  }
+  function cloudField(path) {
+    const field = adapter.profile?.fields?.[path];
+    if (!field || (known(path) === null && !(field.value_state === 'known' && field.confirmation_state === 'confirmed'))) return null;
+    const {value, value_state, source_type, confirmation_state} = field;
+    return {value, value_state, source_type, confirmation_state};
+  }
+  function legacyFields() {
+    const core = localRecord('careerPredictor') || {};
+    const prep = localRecord('careerPredictorPrep') || {};
+    const student = core.studentProfile || {};
+    return {
+      'education.major': student.major,
+      'education.degree': {undergraduate: '本科', graduate: '研究生'}[student.education],
+      'experience.text': core.experienceText?.trim?.() || prep.resume,
+      'preferences.long_term_goal': prep.confirmed === true ? prep.role : undefined,
+    };
+  }
+  function readFields() {
+    const legacy = legacyFields(), fields = {};
+    for (const path of fieldPaths) {
+      const stored = localRecord(LOCAL_FIELD + path);
+      const cloud = cloudField(path);
+      if (changedFields.has(path)) fields[path] = userField(changedFields.get(path));
+      else if (cloud) fields[path] = cloud;
+      else if (stored && (typeof stored.value === 'string' || stored.value === null)) {
+        fields[path] = userField(stored.value);
+        if (stored.cloud && stored.source_type) {
+          fields[path].source_type = stored.source_type;
+          fields[path].confirmation_state = stored.confirmation_state;
+        }
+      }
+      else if (typeof legacy[path] === 'string' && legacy[path].trim()) fields[path] = userField(legacy[path].trim());
+    }
+    return fields;
+  }
+  function readLocalFields(includeLegacy = false) {
+    const fields = {};
+    const legacy = includeLegacy ? legacyFields() : {};
+    for (const path of fieldPaths) {
+      if (typeof legacy[path] === 'string' && legacy[path].trim()) fields[path] = userField(legacy[path].trim());
+      const stored = localRecord(LOCAL_FIELD + path);
+      if (stored && !stored.cloud && (typeof stored.value === 'string' || stored.value === null)) fields[path] = userField(stored.value);
+      if (!adapter.profile && changedFields.has(path)) fields[path] = userField(changedFields.get(path));
+    }
+    return fields;
+  }
+  async function saveAIConsent(granted) {
+    await adapter.ready;
+    if (!adapter.profile || deleted) throw new Error('当前未连接统一资料，可先使用本浏览器资料。');
+    const work = queue.then(async () => {
+      if (!adapter.profile || deleted) throw new Error('资料会话已失效，请重新连接统一资料。');
+      if (!csrf) {
+        const session = await request('/guest-session','POST',{consent:true,notice_version:'p0-v1',existing_only:true});
+        csrf = session.csrf_token;
+      }
+      adapter.profile = await request('/me/profile/ai-consent','POST',{consent:granted,notice_version:'career-ai-profile-v1'});
+      adapter.state = 'connected';
+      publish();
+      try { localStorage.setItem('careerP0ProfileRevision',String(adapter.profile.profile_revision)); } catch {}
+      return adapter.profile;
+    });
+    queue = work.catch(() => {});
+    return work;
+  }
+  function storeLocal(path, value, cloudField = null) {
+    const entry = {value, cloud: Boolean(cloudField)};
+    if (cloudField) {
+      entry.source_type = cloudField.source_type;
+      entry.confirmation_state = cloudField.confirmation_state;
+    }
+    try { localStorage.setItem(LOCAL_FIELD + path, JSON.stringify(entry)); }
+    catch { throw new Error('浏览器未能保存这项资料。请检查站点存储权限或可用空间后重试。'); }
+  }
+  // Cache manual edits across guest-session expiry, and update any existing local copy.
+  function syncLocalCopies() {
+    for (const path of fieldPaths) {
+      const stored = localRecord(LOCAL_FIELD + path);
+      const cloud = cloudField(path);
+      if (cloud && (stored || cloud.source_type === 'user_form') &&
+          (stored?.value !== cloud.value || stored?.source_type !== cloud.source_type || stored?.confirmation_state !== cloud.confirmation_state)) {
+        try { storeLocal(path, cloud.value, cloud); } catch { /* Cloud copy is already durable. */ }
+      }
+    }
+  }
+  async function saveField(path, input) {
+    if (!fieldPaths.includes(path) || (input !== null && typeof input !== 'string')) throw new Error('无法识别这项个人资料。');
+    const value = input?.trim() || null;
+    const limit = path === 'experience.text' ? 20000 : 2000;
+    if (value && value.length > limit) throw new Error('这项资料最多可保存 ' + limit + ' 个字符。');
+    await adapter.ready;
+    if (refreshError && marker() && !deleted) {
+      await refresh();
+      if (refreshError) throw refreshError;
+    }
+    const pending = changedFields.has(path) ? changedFields.get(path) : undefined;
+    changedFields.delete(path);
+    let storage = 'local';
+    if (adapter.profile) {
+      try { await update(path, value); }
+      catch (error) {
+        if (pending !== undefined && !changedFields.has(path)) changedFields.set(path, pending);
+        throw error;
+      }
+      storage = 'cloud';
+    }
+    try { storeLocal(path, value, storage === 'cloud' ? cloudField(path) : null); }
+    catch (error) { if (storage === 'local') throw error; }
+    persistPending();
+    publish();
+    return {storage};
+  }
   function applyLegacy(){
     try{
       if(typeof appData==='undefined'||!appData||typeof historyViewMode!=='undefined'&&historyViewMode)return;
-      const major=known('education.major'),degree=known('education.degree'),experience=known('experience.text');let changed=false,directionChanged=false;
+      const value = path => {
+        const stored = localRecord(LOCAL_FIELD + path);
+        return known(path) ?? (stored ? stored.value ?? '' : null);
+      };
+      const major=value('education.major'),degree=value('education.degree'),experience=value('experience.text');let changed=false,directionChanged=false;
       if(!changedFields.has('education.major')&&major!=null&&appData.studentProfile.major!==major){appData.studentProfile.major=major;changed=directionChanged=true;}
       if(!changedFields.has('education.degree')&&degree!=null){const mapped=/硕士|博士|研究生/.test(degree)?'graduate':/本科/.test(degree)?'undergraduate':'';if(appData.studentProfile.education!==mapped){appData.studentProfile.education=mapped;changed=directionChanged=true;}}
       if(!changedFields.has('experience.text')&&experience!=null&&appData.experienceText!==experience){appData.experienceText=experience;if(appData.experienceAnalysis&&appData.workspaceUpdates)appData.workspaceUpdates.hard=true;appData.experienceAnalysis=null;changed=true;if(typeof initExperienceStep==='function')initExperienceStep();}
@@ -24,9 +150,69 @@
     }catch{/* Legacy data stays available if its page is not initialized. */}
   }
   function publish(){if(deleted)return;applyLegacy();const values=['education.stage','education.major','skills.self_report'].map(known).filter(Boolean);note(adapter.profile?'统一资料已连接'+(values.length?'：'+values.join(' · '):'，可在轻量入口整理资料。')+'。本页公共资料的主动修改会云保存；练习回答仍只保存在本页。':'当前使用本页资料。启用后可在全站复用公共资料。');window.dispatchEvent(new CustomEvent('career-profile-updated',{detail:adapter.profile}));}
-  async function refresh(){if(deleted)return null;try{adapter.profile=await request('/me/profile');consented=true;let current;try{current=sessionStorage.getItem(LAST);}catch{/* Optional current-task hint. */}if(current){try{adapter.currentIntake=await request(`/intakes/${encodeURIComponent(current)}`);}catch{adapter.currentIntake=null;}}publish();return adapter.profile;}catch(error){if(error.status===401){adapter.profile=null;csrf='';consented=false;publish();return null;}note(error.message,true);return adapter.profile;}}
+  function refresh() {
+    const work = queue.then(loadProfile);
+    queue = work.catch(() => {});
+    return work;
+  }
+  async function loadProfile() {
+    if (deleted) return null;
+    adapter.state = 'loading';
+    refreshError = null;
+    try {
+      const profile = await request('/me/profile');
+      if (deleted) return null;
+      adapter.profile = profile;
+      adapter.state = 'connected';
+      consented = true;
+      syncLocalCopies();
+      let current;
+      try { current = sessionStorage.getItem(LAST); } catch { /* Optional current-task hint. */ }
+      if (current) {
+        try { adapter.currentIntake = await request(`/intakes/${encodeURIComponent(current)}`); }
+        catch { adapter.currentIntake = null; }
+      }
+      publish();
+      return adapter.profile;
+    } catch (error) {
+      if (error.status === 401 || error.code === 'STORAGE_NOT_CONFIGURED') {
+        adapter.profile = null;
+        csrf = '';
+        consented = false;
+        adapter.state = error.code === 'STORAGE_NOT_CONFIGURED' ? 'storage_unavailable' :
+          error.code === 'SESSION_EXPIRED' || marker() ? 'session_expired' : 'not_connected';
+        publish();
+        return null;
+      }
+      refreshError = error;
+      adapter.state = 'load_failed';
+      note(error.message, true);
+      window.dispatchEvent(new CustomEvent('career-profile-updated',{detail:adapter.profile}));
+      return adapter.profile;
+    }
+  }
   function update(field_path,value,options={}){return updateMany([{field_path,value,...(options.confirm?{confirm:true}:{})}]);}
-  function updateMany(patch){const work=queue.then(async()=>{if(deleted)throw new Error('云端资料已删除，请重新启用。');await ensureSession();note('正在保存统一资料…');try{adapter.profile=await request('/me/profile','PATCH',{expected_revision:adapter.profile.profile_revision,patch});publish();note('统一资料已保存到服务器，相关旧分析可重新生成。');try{localStorage.setItem('careerP0ProfileRevision',String(adapter.profile.profile_revision));}catch{/* Cross-tab hint is optional. */}return adapter.profile;}catch(error){note(error.message+' 当前输入仍在本页。',true);throw error;}});queue=work.catch(()=>{});return work;}
+  function updateMany(patch) {
+    const work = queue.then(async () => {
+      if (deleted) throw new Error('云端资料已删除，请重新启用。');
+      await ensureSession();
+      note('正在保存统一资料…');
+      try {
+        adapter.profile = await request('/me/profile', 'PATCH', {expected_revision: adapter.profile.profile_revision, patch});
+        syncLocalCopies();
+        publish();
+        note('统一资料已保存到服务器，相关旧分析可重新生成。');
+        try { localStorage.setItem('careerP0ProfileRevision', String(adapter.profile.profile_revision)); } catch { /* Optional cross-tab hint. */ }
+        return adapter.profile;
+      } catch (error) {
+        if (error.status === 409) await loadProfile();
+        note(error.message + ' 当前输入仍在本页。', true);
+        throw error;
+      }
+    });
+    queue = work.catch(() => {});
+    return work;
+  }
   function restorePending() {
     try {
       const entries = JSON.parse(sessionStorage.getItem(PENDING) || '[]');
@@ -47,7 +233,9 @@
     changedFields.set(field_path,value?.trim()||null);
     clearTimeout(timer);
     if (!marker() && !consented) {
-      note('本次修改目前只在本页保存。点击“启用统一资料云保存”后，可同步你刚修改的字段。');
+      try { storeLocal(field_path, changedFields.get(field_path)); }
+      catch (error) { note(error.message, true); return; }
+      note('本次修改已保存在当前浏览器。点击“启用统一资料云保存”后，可同步你刚修改的字段。');
       return;
     }
     persistPending();
@@ -76,10 +264,35 @@
   function bind(){
     installBanner();
     restorePending();
+    window.addEventListener('storage', event => {
+      if (event.key?.startsWith(LOCAL_FIELD)) {
+        if (!consented && !marker() && localStorage.getItem(event.key) === event.newValue) {
+          changedFields.delete(event.key.slice(LOCAL_FIELD.length));
+        }
+        publish();
+      }
+      if (event.key === NOTICE && event.newValue === 'p0-v1') {
+        deleted = false;
+        refresh();
+      }
+      if (event.key === 'careerP0ProfileRevision') refresh();
+      if (event.key === NOTICE && event.newValue === null) {
+        deleted = true;
+        consented = false;
+        adapter.profile = null;
+        adapter.state = 'not_connected';
+        adapter.currentIntake = null;
+        csrf = '';
+        clearTimeout(timer);
+        changedFields.clear();
+        try { sessionStorage.removeItem(PENDING); } catch { /* Browser storage is optional. */ }
+        note('本人云端资料已删除，当前页面不会继续上传。');
+        window.dispatchEvent(new CustomEvent('career-profile-updated', {detail:null}));
+      }
+    });
     for(const [id,path]of [['majorInput','education.major'],['experienceInput','experience.text'],['resume','experience.text']]){const node=document.getElementById(id);if(node)node.addEventListener('input',()=>{if(typeof historyViewMode!=='undefined'&&historyViewMode)return;schedule(path,node.value);});}
     document.querySelectorAll('[data-profile-field="education"]').forEach(button=>button.addEventListener('click',()=>{if(typeof historyViewMode!=='undefined'&&historyViewMode)return;schedule('education.degree',button.dataset.profileValue==='graduate'?'研究生':'本科');}));
-    window.addEventListener('storage',event=>{if(event.key==='careerP0ProfileRevision')refresh();if(event.key===NOTICE&&event.newValue===null){deleted=true;adapter.profile=null;adapter.currentIntake=null;csrf='';clearTimeout(timer);changedFields.clear();try{sessionStorage.removeItem(PENDING);}catch{}note('本人云端资料已删除，当前页面不会继续上传。');window.dispatchEvent(new CustomEvent('career-profile-updated',{detail:null}));}});
-    window.addEventListener('focus',()=>{if(adapter.profile&&!changedFields.size)refresh();});
+    window.addEventListener('focus',()=>{if((adapter.profile||marker())&&!changedFields.size)refresh();});
     window.addEventListener('pageshow',event=>{
       if(!event.persisted||flushing||(!consented&&!marker()))return;
       clearTimeout(timer);
@@ -87,10 +300,12 @@
       restorePending();
       refresh().then(profile=>{if(changedFields.size&&(profile||marker()))timer=setTimeout(flush,650);});
     });
-    adapter.ready=refresh().then(profile=>{
+    return refresh().then(profile=>{
       if(changedFields.size&&(profile||marker()))timer=setTimeout(flush,650);
       return profile;
     });
   }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind,{once:true});else bind();
+  adapter.ready = document.readyState === 'loading'
+    ? new Promise(resolve => document.addEventListener('DOMContentLoaded', () => resolve(bind()), {once:true}))
+    : bind();
 })();

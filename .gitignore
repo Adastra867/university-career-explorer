@@ -27,6 +27,8 @@ exports/
 # Generated output can contain entered student data and must stay local
 artifacts/
 logs/
+# Local profile audit notes include inventory of saved user data.
+/docs/CAREER_PROFILE_CONTEXT_FIX.md
 *.log
 *.pid
 *.pid.lock

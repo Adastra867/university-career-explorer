@@ -38,11 +38,16 @@ function intakeURL(intake) {
 function taskHeader() {
   const intake = state.intake;
   const task = intake?.task_type || state.requestedTask;
-  $('compareArtwork').hidden = task !== 'compare_options';
-  const [key, title] = taskRoutes[task] || ['profile', '统一资料与提交'];
+  const profileView = location.hash === '#profileCard';
+  document.body.dataset.careerView = profileView ? 'profile' : 'task';
+  $('compareArtwork').hidden = profileView || task !== 'compare_options';
+  $('profileTitle').textContent = profileView ? '我的统一资料' : '本次用于建议的资料';
+  if (profileView && state.profile) $('profileCard').hidden = false;
+  const [key, title] = profileView ? ['profile', '统一资料与提交'] :
+    taskRoutes[task] || ['profile', '统一资料与提交'];
   const stale = intake?.result_stale || (intake?.result && isDirty());
   const status = stale ? '需要更新' : intake?.result && !intake.question ? '已完成' : intake?.input || intake?.result || (intake && isDirty()) ? '进行中' : '未开始';
-  CareerShell.setPage(key, title, task ? status : '');
+  CareerShell.setPage(key, title, !profileView && task ? status : '');
   $('intakeProgress').textContent = $('workspace').hidden ? '第 1 步 · 了解资料如何使用' :
     !intake ? '查看资料，或选择一项任务' :
     intake.question ? '第 3 步 · 补充关键问题，或直接查看建议' :
@@ -177,6 +182,12 @@ async function runTurn(action) {
 }
 function renderProfile() {
   window.CareerIntakeProfile = state.profile;
+  for (const [path, field] of Object.entries(state.profile?.fields || {})) {
+    if (field.source_type === 'user_form') {
+      const {value, source_type, confirmation_state} = field;
+      storage('localStorage', 'setItem', 'careerPersonalField:' + path, JSON.stringify({value, cloud:true, source_type, confirmation_state}));
+    }
+  }
   if(!state.profile)return;const fields=state.profile.fields||{};const preferred={explore_direction:['education.stage','education.major','experience.text','skills.self_report','preferences.long_term_goal'],build_experience:['education.stage','education.major','experience.text','skills.self_report'],find_opportunity:['education.stage','education.degree','education.major','experience.text','skills.self_report'],compare_options:['education.stage','education.major','experience.text','preferences.long_term_goal','preferences.city']}[state.intake?.task_type]||['education.stage','education.major','experience.text','skills.self_report'];state.primary=preferred;$('profilePrimary').replaceChildren();$('profileOther').replaceChildren();
   for(const path of Object.keys(LABELS)){const field=fields[path]||{value:null,value_state:'unknown',confirmation_state:'unconfirmed',source_refs:[]};const container=state.primary.includes(path)?$('profilePrimary'):$('profileOther');const row=text(container,'div','','profile-row');const meta=text(row,'div','','profile-meta');text(meta,'strong',LABELS[path]);text(meta,'small',(field.value_state==='unknown'?'未知':CONFIRMATIONS[field.confirmation_state]||'待确认整理'));text(row,'p',field.value==null||field.value===''?'尚未提供':field.value,'value');text(row,'small',(SOURCES[field.source_type]||'尚无来源')+(field.source_refs?.length?' · 原文：'+field.source_refs.map(ref=>ref.quote||ref.source_id).join('；'):''));const edit=text(row,'details');text(edit,'summary','修改这一项');const label=text(edit,'label','','field');text(label,'span',LABELS[path]);const input=text(label,'textarea');input.rows=path==='experience.text'?5:2;input.maxLength=path==='experience.text'?20000:2000;input.value=field.value||'';const button=text(edit,'button','保存这一项','secondary');button.type='button';button.onclick=()=>updateFields([{field_path:path,value:input.value.trim()||null}]);}
   $('confirmVisibleBtn').disabled=state.busy||!state.primary.some(path=>fields[path]?.value!=null);
@@ -247,7 +258,13 @@ async function loadCampaign() {
     if (state.campaignSlug === slug) status('campaignBanner', '活动无法读取：' + error.message, true);
   }
 }
-async function deleteData(){if(!confirm('确认删除本人全部云端资料、任务和提交正文？会话将失效，无法恢复。'))return;try{state.deleted=false;await api('/me/data','DELETE');state.deleted=true;clearTimeout(state.timer);clearDraftCaches();for(const item of [NOTICE,'careerP0Profile','careerWorkspaceRecentAdvice'])storage('localStorage','removeItem',item);for(const item of [LAST,'careerP0Turn','careerP0Submit','careerP0PendingProfileFields'])storage('sessionStorage','removeItem',item);state.csrf='';state.intake=null;state.profile=null;window.CareerIntakeProfile=null;$('workspace').hidden=true;$('notice').hidden=false;$('editor').hidden=true;taskHeader();status('noticeStatus','本人云端资料已删除，会话已失效。旧本地测评资料未自动上传。');window.dispatchEvent(new CustomEvent('career-profile-updated',{detail:null}));}catch(error){status('globalStatus',error.message,true);}}
+function clearCloudProfileCopies() {
+  for (const path of Object.keys(LABELS)) {
+    const key = 'careerPersonalField:' + path;
+    if (jsonStorage('localStorage', key)?.cloud) storage('localStorage', 'removeItem', key);
+  }
+}
+async function deleteData(){if(!confirm('确认删除本人全部云端资料、任务和提交正文？会话将失效，无法恢复。'))return;try{state.deleted=false;await api('/me/data','DELETE');state.deleted=true;clearTimeout(state.timer);clearDraftCaches();clearCloudProfileCopies();for(const item of [NOTICE,'careerP0Profile','careerWorkspaceRecentAdvice'])storage('localStorage','removeItem',item);for(const item of [LAST,'careerP0Turn','careerP0Submit','careerP0PendingProfileFields'])storage('sessionStorage','removeItem',item);state.csrf='';state.intake=null;state.profile=null;window.CareerIntakeProfile=null;$('workspace').hidden=true;$('notice').hidden=false;$('editor').hidden=true;taskHeader();status('noticeStatus','本人云端资料已删除，会话已失效。旧本地测评资料未自动上传。');window.dispatchEvent(new CustomEvent('career-profile-updated',{detail:null}));}catch(error){status('globalStatus',error.message,true);}}
 async function syncCloud(){
   if(!state.profile||state.deleted||state.busy)return;
   try{
@@ -277,6 +294,10 @@ window.addEventListener('popstate', () => {
   const draft = new URLSearchParams(location.search).get('draft');
   if (draft && draft !== state.intake?.id) loadIntake(draft, null);
   else if (!draft && state.intake) location.reload();
+});
+window.addEventListener('hashchange', () => {
+  taskHeader();
+  if (state.profile) renderProfile();
 });
 taskHeader();
 await loadCampaign();if(storage('localStorage','getItem',NOTICE)==='p0-v1')await startSession();

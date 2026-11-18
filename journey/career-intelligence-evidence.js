@@ -1,19 +1,18 @@
-import { FIELD_PATHS } from '../p0/analysis.js';
-import { ALLOWED_SEARCH_DOMAINS, sanitizeAuthorizedProfile } from './research.js';
+import { ALLOWED_SEARCH_DOMAINS, createResearchService } from './research.js';
+import { buildCareerProfileContext, redactProfileText } from './career-profile-context.js';
 import { careerOccupationSources } from './career-occupations.js';
 
 const SEARCH_DOMAINS = [
   ...ALLOWED_SEARCH_DOMAINS, 'onetonline.org', 'career.huawei.com', 'talent.baidu.com',
   'job.byd.com', 'talent.catl.com', 'yz.tsinghua.edu.cn', 'admission.pku.edu.cn',
 ];
-const PROFILE_SOURCE_TYPES = new Set(['user_form', 'user_text', 'document_extract', 'legacy_import', 'ai_inference']);
-const LOCAL_PROFILE_FIELDS = ['experience', 'interests', 'values', 'goals', 'constraints'];
 const RESEARCH_MESSAGES = {
   OFFLINE_KB: '已在职业知识库和本次提供的资料中检索。',
   LIVE_AND_LOCAL: '已查询公开信息和本次可用资料。公开搜索片段需核对原文。',
   SEARCH_NOT_CONFIGURED: '实时检索服务尚未配置，已查询本次可用的离线资料。',
   SEARCH_NO_VERIFIABLE_RESULTS: '实时检索未返回可用的官方来源，已查询本次可用的离线资料。',
   SEARCH_UNAVAILABLE: '实时检索暂不可用，已查询本次可用的离线资料。',
+  RETRIEVAL_UNAVAILABLE: '资料检索未完整完成，本次按实际可用资料继续分析。',
 };
 
 function invalid(message) {
@@ -21,55 +20,10 @@ function invalid(message) {
 }
 
 function redact(value, max) {
-  if (typeof value !== 'string') return '';
-  return value.normalize('NFKC').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u200b-\u200d\ufeff]/g, '')
-    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[邮箱已省略]')
-    .replace(/(?:\+?86[-\s]?)?1[3-9]\d{9}(?!\d)/g, '[联系电话已省略]')
-    .replace(/\d{17}[\dXx](?!\d)/g, '[证件号已省略]')
-    .replace(/(?:微信(?:号)?|QQ|学号|电话|手机|联系(?:方式|人))\s*[:：]\s*[^\s，,。；;]+/gi, '[联系资料已省略]')
-    .trim().slice(0, max);
+  return redactProfileText(value).slice(0, max);
 }
 
 export { redact as redactCareerText };
-
-function profileFacts(profile) {
-  if (profile?.consent !== true) return [];
-  const fields = Array.isArray(profile.authorizedFields) ? new Set(profile.authorizedFields) : null;
-  const facts = new Map();
-  for (const fact of sanitizeAuthorizedProfile(profile)) {
-    const normalizedField = { education: 'education.degree', major: 'education.major', stage: 'education.stage' }[fact.field] || fact.field;
-    const cleaned = Object.fromEntries(Object.entries(fact).map(([key, value]) => [key, redactProfileValue(value)]));
-    const key = ['skill', 'preference.direction'].includes(fact.field) ? `${normalizedField}:${cleaned.name || cleaned.value}` : normalizedField;
-    facts.set(key, {
-      ...cleaned, field: normalizedField,
-      verificationStatus: fact.evidenceType === 'score' || fact.level === 'score_only' ? 'inference' : 'self_reported',
-    });
-  }
-  for (const field of LOCAL_PROFILE_FIELDS) {
-    if (fields && !fields.has(field)) continue;
-    const value = redact(profile[field], 1500);
-    if (value) facts.set(field, { field, value, provenance: 'user_authorized_profile', verificationStatus: 'self_reported' });
-  }
-  for (const field of FIELD_PATHS) {
-    if (fields && !fields.has(field) && !fields.has('fields')) continue;
-    const record = profile.fields?.[field];
-    if (record?.value_state !== 'known') continue;
-    const value = redact(record.value, 2000);
-    if (!value) continue;
-    const sourceType = PROFILE_SOURCE_TYPES.has(record.source_type) ? record.source_type : 'user_authorized_profile';
-    const confirmation = ['confirmed', 'corrected'].includes(record.confirmation_state) ? record.confirmation_state : 'unconfirmed';
-    const verificationStatus = sourceType === 'ai_inference' && confirmation === 'unconfirmed' ? 'inference' : 'self_reported';
-    const targetField = field === 'experience.text' ? 'experience' : field;
-    if (verificationStatus === 'inference' && facts.has(targetField)) continue;
-    facts.set(targetField, { field, value, provenance: sourceType, confirmation, verificationStatus });
-  }
-  return [...facts.values()];
-}
-
-function redactProfileValue(value) {
-  if (Array.isArray(value)) return value.map((item) => redact(item, 120)).filter(Boolean);
-  return redact(value, 300);
-}
 
 function historyMessages(history) {
   if (history === undefined) return [];
@@ -107,17 +61,75 @@ function evidenceSummary(entry) {
   };
 }
 
-export async function buildCareerIntelligenceContext(body, { research, signal }) {
+async function retrieveWithFallback(research, input, options, now) {
+  function preserveRequestFailure(error) {
+    if (options.signal?.aborted || error?.name === 'AbortError' || error?.code === 'INVALID_RESEARCH_REQUEST') throw error;
+  }
+  try {
+    const result = await research.retrieve(input, options);
+    if (!Array.isArray(result?.evidence) || !result.status || typeof result.status !== 'object') throw new Error('Invalid research result');
+    return result;
+  } catch (error) {
+    preserveRequestFailure(error);
+  }
+
+  // Keep supplied documents request-local, and never retry an external query here.
+  let fallback = { evidence: [], caveats: [], status: { localAvailable: false, userDocumentsUsed: 0 } };
+  try {
+    fallback = await createResearchService({ env: {}, now }).retrieve({ ...input, liveSearch: false }, options);
+  } catch (error) {
+    preserveRequestFailure(error);
+  }
+  return {
+    ...fallback,
+    status: {
+      ...fallback.status, degraded: true, reasonCode: 'RETRIEVAL_UNAVAILABLE', liveConfigured: null,
+      liveSearchPerformed: input.liveSearch ? null : false,
+    },
+    caveats: [
+      ...(fallback.caveats || []),
+      ...(input.liveSearch ? ['原检索服务未返回完整结果，无法确认联网查询是否完成。'] : []),
+    ],
+  };
+}
+
+export async function buildCareerIntelligenceContext(body, { research, signal, now = Date.now, resolvedProfile, preparedProfileContext } = {}) {
+  signal?.throwIfAborted();
   const message = redact(body.message ?? body.question, 4000);
   if (!message) invalid('请输入要分析的职业规划问题。');
-  const knownProfile = profileFacts(body.profile);
+  const prepared = preparedProfileContext || buildCareerProfileContext({ body, resolvedProfile });
+  const knownProfile = prepared.profile;
+  const profileDiagnostics = { ...prepared.profileDiagnostics };
   const history = historyMessages(body.history);
-  const modelContext = { message, profile: knownProfile, history, evidence: [] };
+  profileDiagnostics.historyCount = history.length;
+  let profileStatus = profileDiagnostics.authorized ? knownProfile.length ? 'available' : 'empty' : 'not_requested';
+  if (!knownProfile.length && profileDiagnostics.status !== 'not_requested' &&
+      ['session_expired', 'storage_unavailable', 'load_failed'].includes(profileDiagnostics.connectionStatus)) {
+    profileStatus = profileDiagnostics.connectionStatus;
+  }
+  const contextAvailability = {
+    profile: {
+      status: profileStatus,
+      factCount: knownProfile.length,
+      selfReportedFactCount: knownProfile.filter(fact => fact.verificationStatus === 'self_reported').length,
+      inferredFactCount: knownProfile.filter(fact => fact.verificationStatus === 'inference').length,
+    },
+    history: {
+      status: body.history === undefined ? 'not_supplied' : history.length ? 'available' : 'empty',
+      messageCount: history.length, userMessageCount: history.filter(turn => turn.role === 'user').length,
+    },
+    documents: { status: 'not_requested', documentCount: 0, passageCount: 0 },
+    research: {
+      status: 'not_requested', reasonCode: 'RESEARCH_DISABLED', evidenceCount: 0,
+      liveSearchRequested: false, liveSearchPerformed: false, liveSourceCount: 0,
+    },
+  };
+  const modelContext = { message, profile: knownProfile, history, evidence: [], contextAvailability, profileDiagnostics };
   const liveSearch = body.liveSearch === true;
   if (body.researchEnabled !== true) {
     if (liveSearch) invalid('开启联网查询前，请允许资料检索。');
     return {
-      modelContext, sources: [],
+      modelContext, profileDiagnostics, sources: [],
       retrieval: { enabled: false, liveSearchPerformed: false, reasonCode: 'RESEARCH_DISABLED', message: '本次未启用资料检索。' },
     };
   }
@@ -133,17 +145,30 @@ export async function buildCareerIntelligenceContext(body, { research, signal })
   const routeTitles = (body.routes || []).map((route) => redact(route.title, 120));
   const focusTitles = [redact(body.focusNode?.title, 120), redact(body.focusNode?.parentTitle, 120)];
   const question = [message, ...new Set([...routeTitles, ...focusTitles, ...profileKeywords].filter(Boolean))].join('\n').slice(0, 4000);
-  const result = await research.retrieve({
-    question, documents: requestDocuments(body.documents), liveSearch,
+  const documents = requestDocuments(body.documents);
+  const result = await retrieveWithFallback(research, {
+    question, documents, liveSearch,
   }, {
     signal, publicSearchQuery, searchDomains: SEARCH_DOMAINS,
     additionalSources: careerOccupationSources, includeDocumentFallback: true,
-  });
+  }, now);
+  signal?.throwIfAborted();
   const evidence = result.evidence.map(evidenceSummary);
   modelContext.evidence = evidence;
   const sources = evidence.filter((entry, index) => evidence.findIndex((source) => source.sourceId === entry.sourceId) === index);
+  const personalPassages = evidence.filter(entry => entry.origin === 'user_document');
+  contextAvailability.documents = {
+    status: documents?.length ? personalPassages.length ? 'available' : 'not_retrieved' : 'empty',
+    documentCount: documents?.length || 0, passageCount: personalPassages.length,
+  };
+  contextAvailability.research = {
+    status: result.status.degraded ? 'degraded' : 'completed', reasonCode: result.status.reasonCode,
+    evidenceCount: evidence.length, liveSearchRequested: liveSearch,
+    liveSearchPerformed: result.status.liveSearchPerformed,
+    liveSourceCount: sources.filter(source => source.origin === 'live_search').length,
+  };
   return {
-    modelContext, sources,
+    modelContext, profileDiagnostics, sources,
     retrieval: {
       enabled: true, checkedAt: result.checkedAt, ...result.status,
       message: RESEARCH_MESSAGES[result.status.reasonCode], warnings: result.caveats,

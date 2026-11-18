@@ -12,13 +12,14 @@ const __dirname = dirname(__filename);
 if (process.env.JOURNEY_LOAD_ENV !== 'false' && existsSync(join(__dirname, '.env')) && typeof process.loadEnvFile === 'function') process.loadEnvFile(join(__dirname, '.env'));
 
 const app = express();
+let careerRouter;
 if (process.env.CAREER_TRUST_PROXY === 'true') app.set('trust proxy', 1);
 if ((process.env.NODE_ENV === 'production' || process.env.RENDER === 'true') && !process.env.CAREER_DB_PATH) {
   // A free Render service has no persistent filesystem. Keep the existing site
   // online, but never accept student records into an ephemeral SQLite file.
   const unavailableCareerPaths = [
     '/career/status', '/guest-session', '/campaigns/:slug/public',
-    '/me/profile', '/me/profile/import', '/me/submissions',
+    '/me/profile', '/me/profile/ai-consent', '/me/profile/import', '/me/submissions',
     '/me/submissions/:id/withdraw', '/me/data',
     '/intakes', '/intakes/:id', '/intakes/:id/draft',
     '/intakes/:id/turns', '/intakes/:id/submission-preview', '/submissions',
@@ -35,7 +36,8 @@ if ((process.env.NODE_ENV === 'production' || process.env.RENDER === 'true') && 
     } });
   });
 } else {
-  app.use('/api', createCareerRouter());
+  careerRouter = createCareerRouter();
+  app.use('/api', careerRouter);
 }
 app.get(['/start','/start/'], (_req,res) => res.sendFile(join(__dirname,'p0','public','start.html')));
 app.get(['/admin','/admin/'], (_req,res) => res.sendFile(join(__dirname,'p0','public','admin.html')));
@@ -50,7 +52,11 @@ const jobRecommendationRequestTimes = new Map();
 
 // Independent P0 workspace. Disabling this flag leaves all legacy routes intact.
 if (process.env.JOURNEY_ENABLED !== 'false') {
-  app.use('/api/journey', createJourneyRouter());
+  app.use('/api/journey', createJourneyRouter({
+    resolveCareerProfile: req => careerRouter
+      ? careerRouter.locals.resolveProfile(req)
+      : { authenticated: false, consent: false, profile: null, source: 'sqlite', status: 'storage_unavailable' },
+  }));
   app.get(['/trees', '/trees/', '/trees/:treeId', '/journey', '/journey/'], (_req, res) => res.sendFile(join(__dirname, 'journey', 'index.html')));
   app.get('/journey/vendor/:asset', (req, res) => ['pdf.mjs', 'pdf.worker.mjs'].includes(req.params.asset)
     ? res.sendFile(join(__dirname, 'node_modules', 'pdfjs-dist', 'build', req.params.asset))
@@ -67,16 +73,23 @@ if (process.env.JOURNEY_ENABLED !== 'false') {
   app.use(['/journey', '/trees', '/api/journey'], (_req, res) => res.status(404).send('始于足下暂未开放'));
 }
 app.use(express.json());
-// The legacy static directory must not bypass the Journey gate through encoded
-// separators, dot segments, or expose Journey server/test implementation files.
+// Expose only the legacy pages and their published assets. Backups, exports and
+// other files added beside the application must not become web resources.
+const publicSitePaths = new Set([
+  '/', '/index.html', '/job-search.html', '/career-prep.html',
+  '/scripts/career-assistant.js', '/scripts/career-chat-store.js',
+  '/scripts/career-intelligence.js', '/scripts/career-prep.js',
+  '/scripts/career-shell.js', '/scripts/career-workspace.js', '/scripts/job-scoring.js',
+  '/styles/career-intelligence.css', '/styles/career-shell.css', '/styles/main.css', '/styles/tailwind.css',
+  '/vendor/chart.umd.js', '/vendor/chart.LICENSE.md',
+  '/assets/career/career-compare.webp', '/assets/career/career-explore.webp',
+  '/assets/career/career-jobs.webp', '/assets/career/career-orbit.webp', '/assets/career/career-skills.webp',
+]);
+const servePublicSite = express.static(__dirname);
 app.use((req, res, next) => {
-  let segments;
-  try { segments = decodeURIComponent(req.path).replace(/\\/g, '/').toLowerCase().split('/').map(segment => segment.replace(/[. ]+$/, '')); }
-  catch { return res.status(400).send('Invalid path'); }
-  if (segments.some(segment => segment.includes(':')) || ['journey','tests','node_modules','p0','data','docs','.git','artifacts'].some(segment=>segments.includes(segment)) || segments.at(-1) === 'server.js' || /\.(sqlite|sqlite-wal|sqlite-shm|db|sql|env)$/i.test(segments.at(-1)||'')) return res.status(404).send('Not found');
+  if (publicSitePaths.has(req.path)) return servePublicSite(req, res, next);
   next();
 });
-app.use(express.static(__dirname));
 
 const JOB_PLATFORM_SITES = 'zhipin.com,zhaopin.com,51job.com,liepin.com,lagou.com,intern.supply';
 

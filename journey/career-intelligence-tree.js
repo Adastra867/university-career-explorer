@@ -46,7 +46,7 @@ export function getCareerNodeContext(treeId, nodeId, storage = globalThis.localS
 const branchFields = [
   'id', 'type', 'title', 'description', 'reason', 'goal', 'startingPoint', 'advantages', 'skillGaps', 'risks',
   'knowledge', 'credentials', 'practice', 'nextActions', 'verification', 'timeCost', 'economicCost',
-  'opportunityCost', 'flexibility', 'confidence', 'evidenceIds', 'stages',
+  'opportunityCost', 'flexibility', 'confidence', 'evidenceIds', 'stages', 'planningHorizon',
 ];
 
 function branchSnapshot(branch) {

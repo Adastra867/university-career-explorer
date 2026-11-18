@@ -58,6 +58,7 @@ function renderWorkspace({ step, detail, position, identifier }, focus = false) 
     historyViewReturnData = null;
   }
   if (currentStep === 8 && step !== 8) window.CareerIntelligence?.deactivate();
+  document.body.classList.toggle('ci-active', step === 8);
   currentStep = step;
   const section = document.getElementById('step' + step);
   document.querySelectorAll('.step-section').forEach(node => {
