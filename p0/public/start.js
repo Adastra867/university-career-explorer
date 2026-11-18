@@ -9,20 +9,27 @@ const LABELS = {'education.stage':'年级 / 阶段','education.degree':'学历',
 const SOURCES = {user_form:'本人填写',user_text:'材料中明确提及',document_extract:'文件文字整理',legacy_import:'旧资料导入',ai_inference:'AI 推断'};
 const CONFIRMATIONS = {confirmed:'已确认',corrected:'本人已修改',unconfirmed:'待确认整理'};
 const NOTICE = 'careerP0Notice', CACHE = 'careerP0DraftCache', LAST = 'careerP0LastIntake';
-const state = {csrf:'',guest:null,profile:null,intake:null,campaign:null,campaignSlug:new URLSearchParams(location.search).get('campaign')||'',requestedTask:new URLSearchParams(location.search).get('task'),saving:null,timer:null,busy:false,deleted:false,conflict:false,preview:null,turn:null,submission:null,legacy:[],primary:[],inputSource:'user_text'};
+const AUTH_CHANGE = 'careerP0AuthChange', ACCOUNT_ACTIVE = 'careerP0AccountActive', TURN = 'careerP0Turn', SUBMISSION = 'careerP0Submit';
+const state = {csrf:'',guest:null,profile:null,intake:null,campaign:null,campaignSlug:new URLSearchParams(location.search).get('campaign')||'',requestedTask:new URLSearchParams(location.search).get('task'),saving:null,timer:null,busy:false,deleted:false,conflict:false,preview:null,turn:null,submission:null,legacy:[],primary:[],inputSource:'user_text',account:null,registration:false,accountBusy:false,starting:false,registerMode:false,identityVersion:0};
 function text(parent,tag,value,className) { const node=document.createElement(tag);node.textContent=value??'';if(className)node.className=className;parent.append(node);return node; }
 function status(id,message,isError=false) { $(id).textContent=message||'';$(id).classList.toggle('error',isError); }
-function storage(kind,method,key,value) { try { return window[kind][method](key,...(value===undefined?[]:[value])); } catch { return null; } }
+function storage(kind,method,key,value) {
+  const ownedKey = kind === 'sessionStorage' && (key === TURN || key === SUBMISSION) ? accountKey(key) : key;
+  try { return window[kind][method](ownedKey,...(value===undefined?[]:[value])); } catch { return null; }
+}
 function jsonStorage(kind,key) { try { return JSON.parse(storage(kind,'getItem',key)||'null'); } catch { return null; } }
 function key() { return crypto.randomUUID(); }
 async function api(path,method='GET',body) {
+  const identityVersion = state.identityVersion;
   const response=await fetch('/api'+path,{method,credentials:'same-origin',cache:'no-store',headers:{...(method!=='GET'?{'Content-Type':'application/json'}:{}),...(state.csrf&&method!=='GET'?{'X-CSRF-Token':state.csrf}:{})},...(method!=='GET'?{body:JSON.stringify(body??{})}:{})});
   let payload;try { payload=await response.json(); } catch { throw new Error('服务器返回无法读取的响应，请保留输入后重试。'); }
   if(!response.ok) { const error=new Error(payload.error?.message||'操作未完成，请稍后重试。');error.code=payload.error?.code;error.status=response.status;throw error; }
-  if(state.deleted&&path!=='/guest-session') throw new Error('本会话已删除，请重新开始。');
+  if(identityVersion !== state.identityVersion || state.deleted && !['/guest-session','/accounts/login','/accounts/register'].includes(path)) {
+    throw new Error('登录状态已更新，请使用当前会话。');
+  }
   return payload;
 }
-function setBusy(busy) { state.busy=busy;['generateBtn','saveBtn','answerBtn','skipBtn','directBtn','reanalyzeBtn','retryTurnBtn','previewBtn','importLegacyBtn','confirmVisibleBtn'].forEach(id=>$(id).disabled=busy);document.querySelectorAll('[data-task]').forEach(button=>button.disabled=busy);renderShareState(); }
+function setBusy(busy) { state.busy=busy;['generateBtn','saveBtn','answerBtn','skipBtn','directBtn','reanalyzeBtn','retryTurnBtn','previewBtn','importLegacyBtn','confirmVisibleBtn'].forEach(id=>$(id).disabled=busy);document.querySelectorAll('[data-task]').forEach(button=>button.disabled=busy);renderAccount();renderShareState(); }
 function conditions() { return {jd:$('jdInput').value.trim(),options:$('optionsInput').value.trim(),time:$('constraintsInput').value.trim()}; }
 const taskRoutes = {
   explore_direction: ['direction', '方向建议'],
@@ -54,10 +61,19 @@ function taskHeader() {
     intake.result ? (stale ? '第 3 步 · 更新建议' : '第 3 步 · 查看建议') : '第 2 步 · 输入情况并生成建议';
   window.refreshAssistantContext?.();
 }
-function draftCacheKey(id = state.intake?.id) { return CACHE + ':' + id; }
-function answerCacheKey(id = state.intake?.id) { return 'careerP0Answer:' + id; }
+function accountKey(name) { return state.account ? 'careerP0Account:' + state.account.id + ':' + name : name; }
+function draftStore() { return state.account ? 'sessionStorage' : 'localStorage'; }
+function draftCacheKey(id = state.intake?.id) { return accountKey(CACHE + ':' + id); }
+function answerCacheKey(id = state.intake?.id) { return accountKey('careerP0Answer:' + id); }
 function clearDraftCaches() {
   try {
+    if (state.account) {
+      const namespace = accountKey('');
+      for (const name of Object.keys(sessionStorage)) {
+        if (name.startsWith(namespace)) sessionStorage.removeItem(name);
+      }
+      return;
+    }
     if (CareerShell.recent()?.href?.startsWith('/start?')) localStorage.removeItem('careerWorkspaceRecent');
     if (CareerShell.recentAdvice()?.href?.startsWith('/start?')) localStorage.removeItem('careerWorkspaceRecentAdvice');
     for (const name of Object.keys(localStorage)) {
@@ -69,12 +85,12 @@ function clearDraftCaches() {
   } catch {}
 }
 function rememberTask() {
-  if (state.intake) CareerShell.remember(intakeURL(state.intake), taskRoutes[state.intake.task_type][1]);
+  if (state.intake && !state.account) CareerShell.remember(intakeURL(state.intake), taskRoutes[state.intake.task_type][1]);
 }
 function cacheDraft() {
   if (!state.intake || state.deleted) return;
-  const previous = jsonStorage('localStorage', draftCacheKey());
-  storage('localStorage', 'setItem', draftCacheKey(), JSON.stringify({
+  const previous = jsonStorage(draftStore(), draftCacheKey());
+  storage(draftStore(), 'setItem', draftCacheKey(), JSON.stringify({
     guest_id: state.guest,
     intake_id: state.intake.id,
     base_revision: state.conflict && previous ? previous.base_revision : state.intake.input_revision,
@@ -85,8 +101,8 @@ function cacheDraft() {
   }));
 }
 function clearCache() {
-  storage('localStorage','removeItem',draftCacheKey());
-  if (jsonStorage('localStorage',CACHE)?.intake_id === state.intake?.id) storage('localStorage','removeItem',CACHE);
+  storage(draftStore(),'removeItem',draftCacheKey());
+  if (!state.account && jsonStorage('localStorage',CACHE)?.intake_id === state.intake?.id) storage('localStorage','removeItem',CACHE);
 }
 function isDirty() { return state.intake&&($('mainInput').value.trim()!==state.intake.input||JSON.stringify(conditions())!==JSON.stringify({jd:state.intake.conditions?.jd||'',options:state.intake.conditions?.options||'',time:state.intake.conditions?.time||''})); }
 function changed() { if(!state.intake||state.deleted)return;cacheDraft();rememberTask();taskHeader();status('saveStatus','尚未保存到服务器；当前输入仅缓存在此设备。');clearTimeout(state.timer);state.timer=setTimeout(()=>flushDraft().catch(()=>{}),650);renderShareState(); }
@@ -116,7 +132,7 @@ function fillEditor(intake, navigation = 'replaceState') {
   if (navigation && url !== location.pathname + location.search + location.hash) history[navigation](null, '', url);
   $('questionAnswer').value = storage('sessionStorage','getItem',answerCacheKey()) || '';
   $('intakeTaskPicker').open = false;
-  state.inputSource=intake.input_source_type||'user_text';state.conflict=false;$('reloadBtn').hidden=true;$('editor').hidden=false;$('taskTitle').textContent=TASKS[intake.task_type]?.[0]||'当前任务';$('taskHelp').textContent=TASKS[intake.task_type]?.[1]||'';$('mainInput').value=intake.input||'';$('mainInput').placeholder=TASKS[intake.task_type]?.[1]||'';$('jdInput').value=intake.conditions?.jd||'';$('optionsInput').value=intake.conditions?.options||'';$('constraintsInput').value=intake.conditions?.time||'';document.querySelectorAll('[data-task]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.task===intake.task_type)));storage('sessionStorage','setItem',LAST,intake.id);status('saveStatus','已保存到服务器 · 仅供本人继续');renderResult();renderProfile(); }
+  state.inputSource=intake.input_source_type||'user_text';state.conflict=false;$('reloadBtn').hidden=true;$('editor').hidden=false;$('taskTitle').textContent=TASKS[intake.task_type]?.[0]||'当前任务';$('taskHelp').textContent=TASKS[intake.task_type]?.[1]||'';$('mainInput').value=intake.input||'';$('mainInput').placeholder=TASKS[intake.task_type]?.[1]||'';$('jdInput').value=intake.conditions?.jd||'';$('optionsInput').value=intake.conditions?.options||'';$('constraintsInput').value=intake.conditions?.time||'';document.querySelectorAll('[data-task]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.task===intake.task_type)));storage('sessionStorage','setItem',accountKey(LAST),intake.id);status('saveStatus','已保存到服务器 · 仅供本人继续');renderResult();renderProfile(); }
 async function loadIntake(id, navigation = 'pushState') {
   if (state.busy) return;
   setBusy(true);
@@ -131,7 +147,7 @@ async function loadIntake(id, navigation = 'pushState') {
   }
 }
 function restoreCache() {
-  const cache = jsonStorage('localStorage', draftCacheKey()) || jsonStorage('localStorage', CACHE);
+  const cache = jsonStorage(draftStore(), draftCacheKey()) || (!state.account && jsonStorage('localStorage', CACHE));
   if (cache?.guest_id !== state.guest || cache.intake_id !== state.intake?.id || Date.now() - cache.saved_at >= 7 * 86400000) return;
   $('mainInput').value = cache.input || '';
   state.inputSource = cache.input_source_type || 'user_text';
@@ -150,7 +166,18 @@ function restoreCache() {
   renderShareState();
 }
 async function createTask(taskType, navigation = 'pushState') { if(state.busy)return;if(state.intake?.task_type===taskType&&state.intake.campaign_slug===(state.campaignSlug||null)){$('mainInput').focus();return;}try { await flushDraft();setBusy(true);status('globalStatus','');const intake=await api('/intakes','POST',{task_type:taskType,...(state.campaignSlug?{campaign_slug:state.campaignSlug}:{})});fillEditor(intake, navigation);rememberTask();await refreshLists();$('mainInput').focus(); }catch(error){status('globalStatus',error.message,true);}finally{setBusy(false);} }
-async function refreshProfile() { state.profile=await api('/me/profile');storage('localStorage','setItem','careerP0ProfileRevision',String(state.profile.profile_revision));renderProfile();window.dispatchEvent(new CustomEvent('career-profile-updated',{detail:state.profile})); }
+async function refreshProfile() {
+  const profile = await api('/me/profile');
+  if ((profile.account?.id || null) !== (state.account?.id || null)) {
+    resetWorkspace();
+    location.reload();
+    return;
+  }
+  state.profile = profile;
+  storage('localStorage','setItem','careerP0ProfileRevision',String(state.profile.profile_revision));
+  renderProfile();
+  window.dispatchEvent(new CustomEvent('career-profile-updated',{detail:state.profile}));
+}
 function pendingTurn(){const saved=state.turn||jsonStorage('sessionStorage','careerP0Turn');if(saved?.intake_id===state.intake?.id)return saved;const pending=state.intake?.pending_turn;if(pending?.idempotency_key&&pending.body)return{...pending,intake_id:state.intake.id};return null;}
 function renderResult() {
   taskHeader();
@@ -175,7 +202,7 @@ async function runTurn(action) {
     if(result.input_revision>=state.intake.input_revision)state.intake=result;else state.intake=await api(`/intakes/${encodeURIComponent(pending.intake_id)}`);
     state.turn=null;storage('sessionStorage','removeItem','careerP0Turn');storage('sessionStorage','removeItem',answerCacheKey());$('questionAnswer').value='';
     rememberTask();
-    if (state.intake.result) CareerShell.rememberAdvice(intakeURL(state.intake) + '#resultCard', taskRoutes[state.intake.task_type][1]);
+    if (state.intake.result && !state.account) CareerShell.rememberAdvice(intakeURL(state.intake) + '#resultCard', taskRoutes[state.intake.task_type][1]);
     await refreshProfile();renderResult();await refreshLists();status('globalStatus','初步结果已生成，可直接查看；资料确认不是前置条件。');
   }catch(error){status('globalStatus',`${error.message} 输入仍保留。可再次点击原操作重试。`,true);if(error.status>=400&&error.status<500&&error.status!==429){state.turn=null;storage('sessionStorage','removeItem','careerP0Turn');}renderResult();}
   finally{setBusy(false);}
@@ -183,7 +210,7 @@ async function runTurn(action) {
 function renderProfile() {
   window.CareerIntakeProfile = state.profile;
   for (const [path, field] of Object.entries(state.profile?.fields || {})) {
-    if (field.source_type === 'user_form') {
+    if (!state.account && field.source_type === 'user_form') {
       const {value, source_type, confirmation_state} = field;
       storage('localStorage', 'setItem', 'careerPersonalField:' + path, JSON.stringify({value, cloud:true, source_type, confirmation_state}));
     }
@@ -211,28 +238,172 @@ async function refreshLists() {
 }
 function formatDate(value){if(!value)return'';const date=new Date(value);return Number.isNaN(date.getTime())?String(value):date.toLocaleString('zh-CN');}
 function legacyRecords() {const records=[];const add=(field_path,value,source_key)=>{if(typeof value==='string'&&value.trim())records.push({field_path,value:value.trim().slice(0,field_path==='experience.text'?20000:2000),source_key});};const core=jsonStorage('localStorage','careerPredictor');if(core&&typeof core==='object'){add('education.major',core.studentProfile?.major,'careerPredictor');const degree={undergraduate:'本科',graduate:'研究生'}[core.studentProfile?.education];add('education.degree',degree,'careerPredictor');add('experience.text',core.experienceText,'careerPredictor');}const prep=jsonStorage('localStorage','careerPredictorPrep');if(prep&&typeof prep==='object'){if(!records.some(item=>item.field_path==='experience.text'))add('experience.text',prep.resume,'careerPredictorPrep');if(prep.confirmed===true)add('preferences.long_term_goal',prep.role,'careerPredictorPrep');}return records;}
-function showLegacy() {state.legacy=legacyRecords();$('legacyCard').hidden=!state.legacy.length;$('legacyPreview').replaceChildren();for(const record of state.legacy){const row=text($('legacyPreview'),'div','','profile-row');text(row,'strong',LABELS[record.field_path]);text(row,'p',record.value,'value');text(row,'small','来源：'+record.source_key);const current=state.profile?.fields?.[record.field_path]?.value;if(current!=null&&current!==record.value)text(row,'p','与云端资料不同，将保留云端值：'+current,'warning');}}
+function showLegacy() {state.legacy=state.account?[]:legacyRecords();$('legacyCard').hidden=!state.legacy.length;$('legacyPreview').replaceChildren();for(const record of state.legacy){const row=text($('legacyPreview'),'div','','profile-row');text(row,'strong',LABELS[record.field_path]);text(row,'p',record.value,'value');text(row,'small','来源：'+record.source_key);const current=state.profile?.fields?.[record.field_path]?.value;if(current!=null&&current!==record.value)text(row,'p','与云端资料不同，将保留云端值：'+current,'warning');}}
 async function importLegacy(){if(state.busy)return;try{setBusy(true);const canonical=JSON.stringify(state.legacy);const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(canonical));const importId='legacy-'+Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');const result=await api('/me/profile/import','POST',{expected_revision:state.profile.profile_revision,import_id:importId,records:state.legacy});state.profile=result.profile||result;await refreshProfile();status('legacyStatus','允许的旧资料已导入，来源标记为旧资料导入。已有云端值和原始本地资料保留。');$('importLegacyBtn').disabled=true;}catch(error){status('legacyStatus',error.message,true);}finally{setBusy(false);}}
-async function startSession(explicit=false) {
-  $('consentBtn').disabled=true;status('noticeStatus','正在建立个人会话…');
-  try{
-    const session=await api('/guest-session','POST',{consent:true,notice_version:'p0-v1'});
-    state.deleted=false;state.csrf=session.csrf_token;state.guest=session.guest_id;state.profile=session.profile||await api('/me/profile');
-    storage('localStorage','setItem',NOTICE,'p0-v1');$('notice').hidden=true;$('workspace').hidden=false;
-    $('sessionInfo').textContent=`${session.ai_configured?'已配置在线 AI；生成建议时使用。':'当前使用规则建议，未配置在线 AI。'} 资料按项目配置保存 ${session.retention_days||'规定'} 天；可在“我的提交”中撤回或删除。`;
-    window.CareerIntakeProfile = state.profile;renderProfile();showLegacy();const drafts=await refreshLists();const last=storage('sessionStorage','getItem',LAST);
-    const requested=TASKS[state.requestedTask]?state.requestedTask:null;
-    const matching=item=>item.campaign_slug===(state.campaignSlug||null)&&(!requested||item.task_type===requested);
-    const wanted = new URLSearchParams(location.search).get('draft');
-    const chosen=drafts.find(item=>item.id===wanted&&matching(item))||drafts.find(item=>item.id===last&&matching(item))||drafts.find(matching);
-    if(chosen){fillEditor(await api(`/intakes/${encodeURIComponent(chosen.id)}`));restoreCache();}
-    else if(requested)await createTask(requested, 'replaceState');
-    else { $('intakeTaskPicker').open = true; $('profileCard').hidden = false; }
-    taskHeader();
-    if (['#resultCard','#cloudHistory','#profileCard'].includes(location.hash)) document.getElementById(location.hash.slice(1)).scrollIntoView();
-    if(explicit)status('globalStatus',chosen||requested?'已进入当前任务，已有资料会自动复用。':'已建立个人进度，请选择当前任务。');
-  }catch(error){$('notice').hidden=false;status('noticeStatus',error.message,true);}
-  finally{$('consentBtn').disabled=false;}
+async function openWorkspace(session, explicit = false) {
+  state.deleted = false;
+  state.account = session.account || null;
+  state.csrf = session.csrf_token;
+  state.guest = session.guest_id;
+  state.profile = session.profile || await api('/me/profile');
+  if (state.account) storage('localStorage', 'setItem', ACCOUNT_ACTIVE, 'yes');
+  else {
+    storage('localStorage', 'removeItem', ACCOUNT_ACTIVE);
+    storage('localStorage', 'setItem', NOTICE, 'p0-v1');
+  }
+  $('notice').hidden = true;
+  $('workspace').hidden = false;
+  const analysisMode = session.ai_configured ? '已配置在线 AI。' : '当前使用规则建议。';
+  $('sessionInfo').textContent = state.account
+    ? analysisMode + ' 统一资料与任务按当前账号保存。'
+    : analysisMode + ` 资料按项目配置保存 ${session.retention_days || '规定'} 天，可在「我的提交」撤回或删除。`;
+  $('deleteDataBtn').textContent = state.account ? '删除账号及统一资料' : '删除本人云端资料';
+  renderAccount();
+  renderProfile();
+  showLegacy();
+  const drafts = await refreshLists();
+  const last = storage('sessionStorage', 'getItem', accountKey(LAST));
+  const requested = Object.hasOwn(TASKS, state.requestedTask) ? state.requestedTask : null;
+  const matching = item => item.campaign_slug === (state.campaignSlug || null) && (!requested || item.task_type === requested);
+  const wanted = new URLSearchParams(location.search).get('draft');
+  const chosen = drafts.find(item => item.id === wanted && matching(item)) ||
+    drafts.find(item => item.id === last && matching(item)) || drafts.find(matching);
+  if (chosen) {
+    fillEditor(await api(`/intakes/${encodeURIComponent(chosen.id)}`));
+    restoreCache();
+  } else if (requested) {
+    await createTask(requested, 'replaceState');
+  } else {
+    $('intakeTaskPicker').open = true;
+    $('profileCard').hidden = false;
+  }
+  taskHeader();
+  if (['#resultCard','#cloudHistory','#profileCard'].includes(location.hash)) document.getElementById(location.hash.slice(1)).scrollIntoView();
+  if (explicit) status('globalStatus', chosen || requested ? '已进入当前任务，已有资料会自动复用。' : '请选择任务，或先整理统一资料。');
+}
+
+function renderAccount() {
+  const activity = state.accountBusy || state.starting;
+  $('accountForm').hidden = Boolean(state.account);
+  $('accountSignedIn').hidden = !state.account;
+  $('accountUsername').textContent = state.account?.username || '';
+  $('accountLogout').disabled = activity || state.busy;
+  for (const id of ['accountUser','accountPassword','accountConsent','accountSubmit','accountToggle']) {
+    $(id).disabled = activity || state.busy;
+  }
+  $('accountToggle').hidden = !state.registration;
+  $('consentBtn').disabled = activity;
+  $('workspace').inert = state.accountBusy;
+}
+
+function setRegisterMode(register) {
+  state.registerMode = state.registration && register;
+  const registering = state.registerMode;
+  $('accountFormTitle').textContent = registering ? '创建学生账号' : '登录账号';
+  $('accountRegisterFields').hidden = !registering;
+  $('accountConsent').required = registering;
+  $('accountPassword').minLength = registering ? 12 : 0;
+  $('accountPassword').autocomplete = registering ? 'new-password' : 'current-password';
+  $('accountSubmit').textContent = registering ? '注册并登录' : '登录';
+  $('accountToggle').textContent = registering ? '返回登录' : '创建账号';
+  status('accountStatus', '');
+}
+
+function resetWorkspace() {
+  clearTimeout(state.timer);
+  if (state.account) clearDraftCaches();
+  state.identityVersion++;
+  Object.assign(state, {account:null,csrf:'',guest:null,profile:null,intake:null,conflict:false,preview:null,turn:null,submission:null,legacy:[],primary:[],inputSource:'user_text'});
+  window.CareerIntakeProfile = null;
+  for (const id of ['mainInput','jdInput','optionsInput','constraintsInput','questionAnswer','documentFile']) $(id).value = '';
+  for (const id of ['profilePrimary','profileOther','draftList','submissionList','resultContent','questionOptions','legacyPreview','previewContent']) $(id).replaceChildren();
+  for (const id of ['workspace','profileCard','editor','pendingCard','resultCard','legacyCard','reloadBtn']) $(id).hidden = true;
+  for (const id of ['globalStatus','noticeStatus','saveStatus','profileStatus','legacyStatus','submitStatus']) status(id,'');
+  if ($('previewDialog').open) $('previewDialog').close();
+  $('notice').hidden = false;
+  $('accountForm').reset();
+  setRegisterMode(false);
+  renderAccount();
+  taskHeader();
+  window.dispatchEvent(new CustomEvent('career-profile-updated', {detail:null}));
+}
+
+let authVersion = storage('localStorage', 'getItem', AUTH_CHANGE);
+function announceAuthChange() {
+  authVersion = key();
+  storage('localStorage', 'setItem', AUTH_CHANGE, authVersion);
+}
+
+async function accountAction(action) {
+  if (state.accountBusy || state.busy || state.starting) return;
+  const loggingOut = action === 'logout';
+  const credentials = {username:$('accountUser').value.trim(),password:$('accountPassword').value};
+  const registering = action === 'register';
+  state.accountBusy = true;
+  renderAccount();
+  status('accountStatus', loggingOut ? '正在退出…' : registering ? '正在创建账号…' : '正在登录…');
+  try {
+    await flushDraft();
+    const body = loggingOut ? {} : registering ? {...credentials,consent:$('accountConsent').checked,notice_version:'p0-v1'} : credentials;
+    const session = await api('/accounts/' + action, 'POST', body);
+    resetWorkspace();
+    if (loggingOut) storage('localStorage', 'removeItem', ACCOUNT_ACTIVE);
+    else storage('localStorage', 'setItem', ACCOUNT_ACTIVE, 'yes');
+    announceAuthChange();
+    if (loggingOut) {
+      const url = new URL(location.href);
+      url.searchParams.delete('draft');
+      history.replaceState(null, '', url.pathname + url.search + url.hash);
+      status('accountStatus', '已退出登录。');
+    } else {
+      await openWorkspace(session);
+      status('accountStatus', registering ? '账号已创建。' : '已登录。');
+    }
+  } catch (error) {
+    status('accountStatus', error.message, true);
+  } finally {
+    $('accountPassword').value = '';
+    state.accountBusy = false;
+    renderAccount();
+  }
+}
+
+async function startSession(explicit = false) {
+  if (state.accountBusy || state.starting) return;
+  state.starting = true;
+  renderAccount();
+  status('noticeStatus', '正在建立个人会话…');
+  try {
+    const session = await api('/guest-session','POST',{consent:true,notice_version:'p0-v1'});
+    await openWorkspace(session, explicit);
+  } catch (error) {
+    $('notice').hidden = false;
+    status('noticeStatus', error.message, true);
+  } finally {
+    state.starting = false;
+    renderAccount();
+  }
+}
+
+async function restoreAccount() {
+  state.starting = true;
+  renderAccount();
+  try {
+    const capability = await api('/career/status');
+    if (typeof capability.account_registration !== 'boolean') return false;
+    state.registration = capability.account_registration;
+    $('accountAccess').hidden = false;
+    renderAccount();
+    const session = await api('/account-session');
+    await openWorkspace(session);
+    return true;
+  } catch (error) {
+    if (!$('accountAccess').hidden && error.status !== 401) status('accountStatus', error.message, true);
+    return Boolean(state.account);
+  } finally {
+    state.starting = false;
+    renderAccount();
+  }
 }
 async function loadCampaign() {
   const slug = state.campaignSlug;
@@ -264,15 +435,51 @@ function clearCloudProfileCopies() {
     if (jsonStorage('localStorage', key)?.cloud) storage('localStorage', 'removeItem', key);
   }
 }
-async function deleteData(){if(!confirm('确认删除本人全部云端资料、任务和提交正文？会话将失效，无法恢复。'))return;try{state.deleted=false;await api('/me/data','DELETE');state.deleted=true;clearTimeout(state.timer);clearDraftCaches();clearCloudProfileCopies();for(const item of [NOTICE,'careerP0Profile','careerWorkspaceRecentAdvice'])storage('localStorage','removeItem',item);for(const item of [LAST,'careerP0Turn','careerP0Submit','careerP0PendingProfileFields'])storage('sessionStorage','removeItem',item);state.csrf='';state.intake=null;state.profile=null;window.CareerIntakeProfile=null;$('workspace').hidden=true;$('notice').hidden=false;$('editor').hidden=true;taskHeader();status('noticeStatus','本人云端资料已删除，会话已失效。旧本地测评资料未自动上传。');window.dispatchEvent(new CustomEvent('career-profile-updated',{detail:null}));}catch(error){status('globalStatus',error.message,true);}}
+async function deleteData() {
+  if (state.busy || state.accountBusy) return;
+  const account = Boolean(state.account);
+  const prompt = account
+    ? '确认删除当前账号及全部统一资料、任务和提交正文？所有设备的会话都将失效，此操作无法恢复。'
+    : '确认删除本人全部云端资料、任务和提交正文？会话将失效，无法恢复。';
+  if (!confirm(prompt)) return;
+  setBusy(true);
+  clearTimeout(state.timer);
+  try {
+    await state.saving?.catch(()=>{});
+    await api('/me/data','DELETE');
+    if (!account) {
+      clearDraftCaches();
+      clearCloudProfileCopies();
+      for (const item of [NOTICE,'careerP0Profile','careerWorkspaceRecentAdvice']) storage('localStorage','removeItem',item);
+      for (const item of [LAST,TURN,SUBMISSION,'careerP0PendingProfileFields']) storage('sessionStorage','removeItem',item);
+    }
+    resetWorkspace();
+    state.deleted = true;
+    if (account) {
+      storage('localStorage', 'removeItem', ACCOUNT_ACTIVE);
+      announceAuthChange();
+      status('accountStatus','账号及统一资料已删除。');
+    }
+    status('noticeStatus','本人云端资料已删除，会话已失效。旧本地测评资料未自动上传。');
+  } catch (error) {
+    status('globalStatus',error.message,true);
+  } finally {
+    setBusy(false);
+  }
+}
 async function syncCloud(){
-  if(!state.profile||state.deleted||state.busy)return;
+  if(!state.profile||state.deleted||state.busy||state.accountBusy)return;
   try{
     await refreshProfile();if(!state.intake)return;
     const prior=state.intake,dirty=isDirty(),fresh=await api(`/intakes/${encodeURIComponent(prior.id)}`);
     if(dirty&&fresh.input_revision!==prior.input_revision&&(fresh.input!==prior.input||JSON.stringify(fresh.conditions)!==JSON.stringify(prior.conditions))){state.conflict=true;$('reloadBtn').hidden=false;status('saveStatus','另一处修改了此任务，请保留当前输入后重新载入、合并。',true);return;}
     state.intake=fresh;renderResult();
-  }catch(error){status('globalStatus',error.message,true);}
+  }catch(error){
+    if (error.status === 401 && state.account) {
+      resetWorkspace();
+      status('accountStatus','登录会话已失效，请重新登录。',true);
+    } else status('globalStatus',error.message,true);
+  }
 }
 document.querySelectorAll('[data-task]').forEach(button=>button.addEventListener('click',()=>createTask(button.dataset.task)));
 ['mainInput','jdInput','optionsInput','constraintsInput'].forEach(id=>$(id).addEventListener('input',()=>{if(id==='mainInput')state.inputSource='user_text';changed();}));
@@ -281,12 +488,46 @@ $('retryTurnBtn').onclick=()=>runTurn('generate');
 $('confirmVisibleBtn').onclick=()=>{const fields=state.profile.fields;updateFields(state.primary.filter(path=>fields[path]?.value!=null).map(path=>({field_path:path,value:fields[path].value,confirm:true})));};
 $('reloadBtn').onclick=async()=>{if(!confirm('重新载入将用云端版本替换编辑区。请先复制希望保留的未保存文字，再手动合并。'))return;try{fillEditor(await api(`/intakes/${encodeURIComponent(state.intake.id)}`));clearCache();}catch(error){status('globalStatus',error.message,true);}};
 $('useProfileBtn').onclick=()=>{const known=Object.values(state.profile?.fields||{}).some(field=>field.value!=null);status('saveStatus',known?'已保存的统一资料会自动用于本次分析，无需粘贴或重复填写。':'当前还没有已保存资料，也可以从一句话开始。');$('profileCard').hidden=false;$('profileCard').scrollIntoView({behavior:'smooth',block:'nearest'});};
-$('documentFile').onchange=async()=>{const file=$('documentFile').files?.[0];if(!file)return;try{status('saveStatus','正在本地提取文件文字…');const {parseDocumentFile}=await import('/journey/documents.js');const document=await parseDocumentFile(file,message=>status('saveStatus',message));if($('mainInput').value.trim()&&!confirm('用文件提取的文字替换当前输入？取消会保留当前输入。'))return;$('mainInput').value=document.text;state.inputSource='document_extract';changed();status('globalStatus','已在本地提取文件文字，请核对后生成建议。');}catch(error){status('saveStatus',error.message,true);}finally{$('documentFile').value='';}};
+$('documentFile').onchange=async()=>{
+  const file=$('documentFile').files?.[0];
+  const identity = state.identityVersion;
+  if(!file)return;
+  try{
+    status('saveStatus','正在本地提取文件文字…');
+    const {parseDocumentFile}=await import('/journey/documents.js');
+    const document=await parseDocumentFile(file,message=>{if(identity===state.identityVersion)status('saveStatus',message);});
+    if(identity!==state.identityVersion)return;
+    if($('mainInput').value.trim()&&!confirm('用文件提取的文字替换当前输入？取消会保留当前输入。'))return;
+    $('mainInput').value=document.text;
+    state.inputSource='document_extract';
+    changed();
+    status('globalStatus','已在本地提取文件文字，请核对后生成建议。');
+  }catch(error){if(identity===state.identityVersion)status('saveStatus',error.message,true);}
+  finally{if(identity===state.identityVersion)$('documentFile').value='';}
+};
 document.querySelector('.file-label').onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();$('documentFile').click();}};
 window.addEventListener('online',()=>{if(state.intake&&isDirty()&&!state.conflict)flushDraft().catch(()=>{});});
 window.addEventListener('pagehide',()=>{if(isDirty())cacheDraft();});
 window.addEventListener('focus',syncCloud);
-window.addEventListener('storage',event=>{if(event.key==='careerP0ProfileRevision')syncCloud();if(event.key===NOTICE&&event.newValue===null&&state.profile){state.deleted=true;clearTimeout(state.timer);state.intake=null;state.profile=null;window.CareerIntakeProfile=null;state.csrf='';$('workspace').hidden=true;$('notice').hidden=false;status('noticeStatus','本人云端资料已在另一页面删除，此页面已停止上传。');}});
+window.addEventListener('storage',event=>{
+  if(event.key===AUTH_CHANGE && event.newValue!==authVersion) {
+    resetWorkspace();
+    location.reload();
+    return;
+  }
+  if(event.key==='careerP0ProfileRevision')syncCloud();
+  if(event.key===NOTICE&&event.newValue===null&&state.profile&&!state.account){
+    state.deleted=true;
+    resetWorkspace();
+    status('noticeStatus','本人云端资料已在另一页面删除，此页面已停止上传。');
+  }
+});
+window.addEventListener('pageshow',event=>{
+  if (event.persisted && authVersion !== storage('localStorage','getItem',AUTH_CHANGE)) {
+    resetWorkspace();
+    location.reload();
+  }
+});
 $('questionAnswer').addEventListener('input', () => {
   if (state.intake) storage('sessionStorage','setItem',answerCacheKey(),$('questionAnswer').value);
 });
@@ -300,4 +541,8 @@ window.addEventListener('hashchange', () => {
   if (state.profile) renderProfile();
 });
 taskHeader();
-await loadCampaign();if(storage('localStorage','getItem',NOTICE)==='p0-v1')await startSession();
+$('accountForm').addEventListener('submit',event=>{event.preventDefault();accountAction(state.registerMode?'register':'login');});
+$('accountToggle').onclick=()=>{setRegisterMode(!state.registerMode);$('accountUser').focus();};
+$('accountLogout').onclick=()=>accountAction('logout');
+await loadCampaign();
+if (!await restoreAccount() && storage('localStorage','getItem',NOTICE)==='p0-v1') await startSession();

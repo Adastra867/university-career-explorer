@@ -25,11 +25,11 @@ async function stop(child) {
   if (child.exitCode === null && child.signalCode === null) { child.kill('SIGKILL'); await ended; }
 }
 
-test('actual process restart preserves guest/admin sessions and submitted snapshots; private routes remain closed', { timeout: 45000 }, async t => {
+test('actual process restart preserves guest, student and admin sessions; private routes remain closed', { timeout: 45000 }, async t => {
   const directory = mkdtempSync(join(tmpdir(), 'career-persist-'));
   const database = join(directory, 'persistent.sqlite');
   const password = `fixture-${randomUUID()}`;
-  const env = { ...process.env, NODE_ENV: 'test', JOURNEY_LOAD_ENV: 'false', JOURNEY_ENABLED: 'false', CAREER_AI_ENABLED: 'false', JOURNEY_AI_ENABLED: 'false', CAREER_DB_PATH: database, CAREER_PUBLIC_URL: '', CAREER_ADMIN_USERNAME: 'persistence-fixture', CAREER_ADMIN_PASSWORD: password, CAREER_ADMIN_DISPLAY_NAME: '虚构持久化测试组织者' };
+  const env = { ...process.env, NODE_ENV: 'test', JOURNEY_LOAD_ENV: 'false', JOURNEY_ENABLED: 'false', CAREER_AI_ENABLED: 'false', JOURNEY_AI_ENABLED: 'false', CAREER_DB_PATH: database, CAREER_PUBLIC_URL: '', CAREER_ALLOW_SELF_REGISTRATION: 'true', CAREER_ADMIN_USERNAME: 'persistence-fixture', CAREER_ADMIN_PASSWORD: password, CAREER_ADMIN_DISPLAY_NAME: '虚构持久化测试组织者' };
   for (const key of Object.keys(env)) if (/(?:API_KEY|ACCESS_TOKEN|SECRET|BASE_URL|AI_MODEL)$/.test(key)) delete env[key];
   let child;
   t.after(async () => {
@@ -68,7 +68,7 @@ test('actual process restart preserves guest/admin sessions and submitted snapsh
       return { status: response.status, body: value };
     } };
   }
-  const admin = identity(), guest = identity();
+  const admin = identity(), guest = identity(), student = identity();
   assert.equal((await admin.call('POST', '/api/admin/login', { username: env.CAREER_ADMIN_USERNAME, password })).status, 200);
   const campaign = (await admin.call('POST', '/api/admin/campaigns', { name: '虚构重启验证活动', description: '仅集成测试使用', scope: '本次输入、相关资料及结果' })).body;
   const session = await guest.call('POST', '/api/guest-session', { consent: true, notice_version: 'p0-v1' });
@@ -85,6 +85,16 @@ test('actual process restart preserves guest/admin sessions and submitted snapsh
   const before = (await admin.call('GET', `/api/admin/submissions/${submitted.body.id}`)).body;
   assert.equal(before.snapshot.profile.fields['education.major'].value, '能源专业');
   assert.equal(before.snapshot.mode, 'rules');
+  const studentCredentials = { username: 'student-fixture', password: `fixture-${randomUUID()}` };
+  const signup = await student.call('POST', '/api/accounts/register', {
+    ...studentCredentials, consent: true, notice_version: 'p0-v1',
+  });
+  assert.equal(signup.status, 201);
+  const studentProfile = await student.call('PATCH', '/api/me/profile', {
+    expected_revision: signup.body.profile.profile_revision,
+    patch: [{ field_path: 'education.major', value: '重启后恢复的合成资料' }],
+  });
+  assert.equal(studentProfile.status, 200);
 
   await stop(child);
   base = await start();
@@ -96,6 +106,10 @@ test('actual process restart preserves guest/admin sessions and submitted snapsh
   assert.equal(personal.body.input, intake.input);
   assert.equal((await admin.call('GET', '/api/admin/submissions')).body.total, 1);
   assert.equal((await guest.call('GET', '/api/me/submissions')).body.items[0].id, submitted.body.id);
+  assert.equal((await student.call('GET', '/api/account-session')).body.account.id, signup.body.account.id);
+  const newDevice = await identity().call('POST', '/api/accounts/login', studentCredentials);
+  assert.equal(newDevice.status, 200);
+  assert.deepEqual(newDevice.body.profile, studentProfile.body);
 
   for (const path of ['/p0/api.js', '/p0/store.js', '/p0/migrations/001_initial.sql', '/data/career.sqlite', '/data/persistent.sqlite', '/artifacts', '/artifacts/p0/student-mobile.png', '/docs/CAREER_P0_HANDOFF.md', '/server.js', '/p0%2fapi.js', '/data%5ccareer.sqlite', '/docs%2fCAREER_P0_HANDOFF.md']) {
     const response = await fetch(base + path);

@@ -17,10 +17,19 @@ export function openCareerStore(path = resolve('data/career.sqlite')) {
   const db = new DatabaseSync(path);
   db.exec('PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA secure_delete=ON;');
   db.exec(readFileSync(new URL('./migrations/001_initial.sql', import.meta.url), 'utf8'));
-  if(!db.prepare('SELECT 1 FROM schema_migrations WHERE version=2').get()) {
+  const migrations = [[2, './migrations/002_turn_snapshot.sql'], [3, './migrations/003_student_accounts.sql']];
+  const applied = db.prepare('SELECT 1 FROM schema_migrations WHERE version=?');
+  for (const [version, file] of migrations) {
+    if (applied.get(version)) continue;
     db.exec('BEGIN IMMEDIATE');
-    try { db.exec(readFileSync(new URL('./migrations/002_turn_snapshot.sql', import.meta.url),'utf8'));db.exec('COMMIT'); }
-    catch(error){db.exec('ROLLBACK');throw error;}
+    try {
+      if (!applied.get(version)) db.exec(readFileSync(new URL(file, import.meta.url), 'utf8'));
+      db.exec('COMMIT');
+    } catch (error) {
+      db.exec('ROLLBACK');
+      db.close();
+      throw error;
+    }
   }
   return {
     db,

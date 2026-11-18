@@ -17,6 +17,8 @@
   const profilePreferenceKey = 'careerChatUseProfile';
   const profileConsentKey = 'careerAIProfileConsentV1';
   const profileConsentVersion = 'career-ai-profile-v1';
+  const accountMarker = 'careerP0AccountActive';
+  const authVersionKey = 'careerP0AuthChange';
   const profileLabels = {
     'education.major': '专业', 'education.stage': '年级或职业阶段', 'education.degree': '学历',
     'education.school': '学校', 'experience.text': '学习、项目或工作经历', 'skills.self_report': '技能',
@@ -31,7 +33,9 @@
   };
   const optionIds = { profile: 'ciUseProfile', history: 'ciUseHistory', research: 'ciResearch', live: 'ciLive', challenge: 'ciChallenge' };
   const message = byId('ciMessage');
-  const sessions = CareerChatStore.create();
+  const authVersion = readBrowserValue(authVersionKey);
+  let accountId;
+  let sessions = null;
   let session = null;
   let task = 'explore';
   let turn = null;
@@ -46,9 +50,62 @@
   let consentRequest = null;
   const selectedRoutes = new Map();
 
+  const scopeReady = window.CareerProfile.ready.then(() => { syncLocalScope(); });
+
+  function readBrowserValue(key) {
+    try { return localStorage.getItem(key); }
+    catch { return null; }
+  }
+
+  function dataKey(key) {
+    return sessions && readBrowserValue(authVersionKey) === authVersion
+      ? CareerChatStore.storageKey(key, accountId) : null;
+  }
+
+  function writeLocal(key, value) {
+    const scoped = dataKey(key);
+    if (!scoped) throw new Error('请先确认当前登录状态。');
+    localStorage.setItem(scoped, value);
+  }
+
+  function syncLocalScope() {
+    const profile = window.CareerProfile;
+    const next = readBrowserValue(authVersionKey) !== authVersion ? undefined :
+      profile.account?.id ?? (readBrowserValue(accountMarker) === 'yes' ? undefined : null);
+    if (next === accountId) return;
+    const hadScope = Boolean(sessions);
+    if (hadScope) {
+      clearTimeout(draftTimer);
+      if (request) request.controller.abort();
+      request = null;
+      session = null;
+      activeRoute = '';
+      activation += 1;
+      byId('ciSessionSearch').value = '';
+      byId('ciProfileValue').value = '';
+      byId('ciNote').value = '';
+      byId('ciFile').value = '';
+      byId('ciFile').disabled = false;
+      importing = false;
+      for (const id of ['ciRecordsDialog', 'ciProfileDialog', 'ciProfileConsentDialog']) {
+        const dialog = byId(id);
+        if (dialog.open) dialog.close('cancelled');
+      }
+    }
+    accountId = next;
+    sessions = next === undefined ? null : CareerChatStore.create({ accountId });
+    if (hadScope) applySession();
+    renderMemory();
+    renderRouteInput();
+    renderDocuments();
+    renderSessions();
+  }
+
   function readArray(key, strict = false) {
+    const scoped = dataKey(key);
+    if (!scoped) return [];
     try {
-      const raw = localStorage.getItem(key);
+      const raw = localStorage.getItem(scoped);
       if (raw === null) return [];
       const value = JSON.parse(raw);
       if (!Array.isArray(value)) throw new Error('记录格式无效');
@@ -104,6 +161,7 @@
 
   function persistSession() {
     if (!session) return true;
+    if (!dataKey(CareerChatStore.KEY)) return false;
     clearTimeout(draftTimer);
     captureSession();
     try {
@@ -119,6 +177,7 @@
 
   function scheduleDraft() {
     resizeComposer();
+    if (!sessions) return;
     if (!session && !message.value.trim()) return;
     if (!session && !createSession({ prompt: message.value, nextTask: task, inheritContext: true })) return;
     clearTimeout(draftTimer);
@@ -140,6 +199,10 @@
   }
 
   function createSession({ prompt = '', nextTask = 'explore', inheritContext = false } = {}) {
+    if (!dataKey(CareerChatStore.KEY)) {
+      status('ciStatus', '请先确认当前登录状态。', true);
+      return false;
+    }
     const settings = inheritContext ? contextOptions() : {};
     cancelRequest();
     if (session && !persistSession()) return false;
@@ -179,6 +242,7 @@
   }
 
   function openSession(id) {
+    if (!dataKey(CareerChatStore.KEY)) return;
     if (session?.id === id) return;
     cancelRequest();
     if (session && !persistSession()) return;
@@ -194,7 +258,7 @@
   function renderSessions() {
     const parent = byId('ciSessions');
     parent.replaceChildren();
-    const items = sessions.list(byId('ciSessionSearch').value);
+    const items = dataKey(CareerChatStore.KEY) ? sessions.list(byId('ciSessionSearch').value) : [];
     if (!items.length) add(parent, 'p', byId('ciSessionSearch').value ? '没有找到相关对话' : '从一个问题开始吧', 'ci-muted ci-session-empty');
     for (const item of items) {
       const row = add(parent, 'div', '', `ci-session${session?.id === item.id ? ' is-active' : ''}`);
@@ -240,7 +304,7 @@
     for (const [key, label] of [['profile', '个人资料'], ['history', '历史记录'], ['research', '职业知识库'], ['live', '实时搜索'], ['challenge', '反向检验']]) {
       if (byId(optionIds[key]).checked) add(tags, 'span', key === 'live' && !byId('ciPublicQuery').value.trim() ? '实时搜索待补充公开词' : label, 'ci-source-tag');
     }
-    if (!byId('ciUseProfile').checked && Object.values(window.CareerProfile.readFields()).some(field => field.value_state === 'known')) {
+    if (sessions && !byId('ciUseProfile').checked && Object.values(window.CareerProfile.readFields()).some(field => field.value_state === 'known')) {
       button(tags, '参考已保存的个人资料', () => enableProfileUse());
     }
     renderProfileConnection();
@@ -279,7 +343,7 @@
       evidence: (record.result.evidence || []).map(source => source.origin === 'user_document' ? { ...source, excerpt: '' } : source),
     } } : record;
     const next = [{ ...existing, ...safe }, ...previous.filter(item => item.id !== record.id)];
-    localStorage.setItem(storageKey, JSON.stringify(next));
+    writeLocal(storageKey, JSON.stringify(next));
     renderMemory();
   }
 
@@ -304,7 +368,7 @@
       }
       button(actions, '删除', () => {
         try {
-          localStorage.setItem(storageKey, JSON.stringify(records().filter(item => item.id !== record.id)));
+          writeLocal(storageKey, JSON.stringify(records().filter(item => item.id !== record.id)));
           renderMemory();
           renderRouteInput();
           status('ciMemoryStatus', '已删除记录。');
@@ -380,6 +444,7 @@
   }
 
   function localData() {
+    if (accountId !== null) return {};
     try { return JSON.parse(localStorage.getItem('careerPredictor')) || {}; }
     catch { return {}; }
   }
@@ -397,8 +462,10 @@
   }
 
   function localProfileConsent() {
+    const scoped = dataKey(profileConsentKey);
+    if (!scoped) return {};
     try {
-      const saved = JSON.parse(localStorage.getItem(profileConsentKey));
+      const saved = JSON.parse(localStorage.getItem(scoped));
       return saved?.granted === true && saved.notice_version === profileConsentVersion ? saved : {};
     } catch { return {}; }
   }
@@ -449,13 +516,14 @@
 
   function rememberProfileUse(enabled) {
     profileOverride = enabled;
-    try { localStorage.setItem(profilePreferenceKey, enabled ? 'yes' : 'no'); } catch {}
+    try { writeLocal(profilePreferenceKey, enabled ? 'yes' : 'no'); } catch {}
     syncProfileChoice();
     refreshSettings();
   }
 
   async function enableProfileUse(includeLegacy = false) {
-    await window.CareerProfile.ready;
+    await scopeReady;
+    if (!dataKey(CareerChatStore.KEY)) return false;
     if (!hasProfileConsent() || includeLegacy && !localProfileConsent().includeLegacy) {
       if (!consentRequest) {
         const modal = byId('ciProfileConsentDialog');
@@ -577,6 +645,13 @@
     if (request || importing) return;
     const question = explicitQuestion || message.value.trim();
     if (!question) return message.focus();
+    if (!sessions) {
+      const current = activation;
+      status('ciStatus', '正在读取已保存资料…');
+      await scopeReady;
+      if (current !== activation || request || importing) return;
+    }
+    if (!dataKey(CareerChatStore.KEY)) return status('ciStatus', '请重新登录后继续恢复账号内的对话。', true);
     if (!session && !createSession({ prompt: question, nextTask: task, inheritContext: true })) return;
     const skipReply = /^(?:跳过(?:这题|这个问题)?|不想(?:说|回答|透露)|暂不(?:提供|回答|透露)|不方便(?:回答|透露)|以后再说)[。！!]?$/u.test(question);
     const newTaskRequest = /(?:请|帮我|直接|先给|不必|不用|不要).*(?:规划|计划|路线|分析|比较|建议|方向|画像|提问|反问)|(?:不必|不用|不要).*(?:问|填)/.test(question);
@@ -631,6 +706,7 @@
     }
     const sessionId = session.id;
     const controller = new AbortController();
+    const canUpdateTurn = () => !controller.signal.aborted && session?.id === sessionId && Boolean(dataKey(CareerChatStore.KEY));
     request = { controller, sessionId, assistantId: assistant.id };
     if (!explicitQuestion && !regenerate) message.value = '';
     persistSession();
@@ -642,11 +718,11 @@
     try {
       const field = user.metadata?.profileReply;
       await window.CareerProfile.ready;
-      if (controller.signal.aborted) return;
+      if (!canUpdateTurn()) return;
       if (field && !regenerate && !user.metadata.profileSaved && !hasProfileAnswer(field)) {
         try {
           const { storage } = await window.CareerProfile.saveField(field, question);
-          if (controller.signal.aborted || session?.id !== sessionId) return;
+          if (!canUpdateTurn()) return;
           session.messages.find(item => item.id === user.id).metadata.profileSaved = storage;
           persistSession();
           renderThread();
@@ -654,7 +730,7 @@
           profileSaveWarning = '这项资料暂未保存，本次仍会根据你刚提供的信息给出建议。';
         }
       }
-      if (controller.signal.aborted || session?.id !== sessionId) return;
+      if (!canUpdateTurn()) return;
       syncProfileChoice();
       refreshSettings();
       const useProfile = byId('ciUseProfile').checked;
@@ -668,7 +744,7 @@
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: controller.signal,
       });
       const data = await response.json().catch(() => null);
-      if (controller.signal.aborted || session?.id !== sessionId) return;
+      if (!canUpdateTurn()) return;
       if (!response.ok || !data?.summary || data.task !== body.task) {
         const error = typeof data?.error === 'string' ? data.error : data?.error?.message;
         throw Object.assign(new Error(error || data?.message || '职业规划 AI 暂不可用，请稍后重试。'),
@@ -685,7 +761,7 @@
       renderRouteInput();
       if (saved) status('ciStatus', profileSaveWarning, Boolean(profileSaveWarning));
     } catch (error) {
-      if (!controller.signal.aborted && session?.id === sessionId) {
+      if (canUpdateTurn()) {
         const target = session.messages.find(item => item.id === assistant.id);
         target.status = 'failed';
         target.error = error instanceof TypeError ? '连接失败，请稍后重试。' : error.message;
@@ -1100,14 +1176,14 @@
         try {
           const saved = readArray(documentKey, true).filter(item => item.id !== entry.id);
           if (saved.length >= 3) return status('ciStatus', '已保存 3 份资料。请先移除一份。', true);
-          localStorage.setItem(documentKey, JSON.stringify([...saved, entry]));
+          writeLocal(documentKey, JSON.stringify([...saved, entry]));
           status('ciStatus', '已保存这份资料的文字。');
         } catch { status('ciStatus', '当前浏览器无法保存资料。', true); }
       });
       button(controls, '移除', () => {
         try {
           const saved = readArray(documentKey, true);
-          if (saved.some(item => item.id === entry.id)) localStorage.setItem(documentKey, JSON.stringify(saved.filter(item => item.id !== entry.id)));
+          if (saved.some(item => item.id === entry.id)) writeLocal(documentKey, JSON.stringify(saved.filter(item => item.id !== entry.id)));
           documents = documents.filter(item => item.id !== entry.id);
           persistSession();
           renderDocuments();
@@ -1131,6 +1207,8 @@
     const input = event.currentTarget;
     const files = [...input.files];
     if (!files.length || importing) return;
+    await scopeReady;
+    if (!dataKey(CareerChatStore.KEY) || importing) return;
     if (documents.length + files.length > 3) {
       input.value = '';
       return status('ciStatus', '一次最多使用 3 份个人资料，请先移除不需要的资料。', true);
@@ -1138,6 +1216,7 @@
     if (!session && !createSession({ prompt: message.value, nextTask: task, inheritContext: true })) return;
     if (!persistSession()) return;
     const targetId = session.id;
+    const targetStore = sessions;
     importing = true;
     input.disabled = true;
     status('ciStatus', '正在提取文件文字。');
@@ -1147,11 +1226,14 @@
       const imported = [];
       for (const file of files) {
         try {
-          const { id, title, text, kind, locator } = await parseDocumentFile(file, progress => status('ciStatus', progress));
+          const { id, title, text, kind, locator } = await parseDocumentFile(file, progress => {
+            if (sessions === targetStore && dataKey(CareerChatStore.KEY)) status('ciStatus', progress);
+          });
           imported.push({ id, title, text, kind, locator });
         } catch (error) { failures.push(`${file.name} · ${error.message}`); }
       }
-      const target = session?.id === targetId ? session : sessions.get(targetId);
+      if (sessions !== targetStore || !dataKey(CareerChatStore.KEY)) return;
+      const target = session?.id === targetId ? session : targetStore.get(targetId);
       if (!target) return;
       if ((target.attachments || []).length + imported.length > 3) throw new Error('资料数量已变化，请移除不需要的资料后重新导入。');
       target.attachments = [...(target.attachments || []), ...imported];
@@ -1161,12 +1243,16 @@
         renderDocuments();
         status('ciStatus', failures.length ? failures.join('；') : '已提取文件文字。可展开核对，勾选资料检索后用于分析。', failures.length > 0);
       } else { sessions.save(target); renderSessions(); }
-    } catch { status('ciStatus', '文件解析暂不可用。可以把相关文字粘贴到问题里。', true); }
+    } catch {
+      if (sessions === targetStore) status('ciStatus', '文件解析暂不可用。可以把相关文字粘贴到问题里。', true);
+    }
     finally {
-      importing = false;
-      input.disabled = false;
-      input.value = '';
-      resizeComposer();
+      if (sessions === targetStore) {
+        importing = false;
+        input.disabled = false;
+        input.value = '';
+        resizeComposer();
+      }
     }
   }
 
@@ -1219,6 +1305,10 @@
     const route = [detail, position, identifier].join('/');
     if (route === activeRoute) { renderMemory(); return; }
     const current = ++activation;
+    const waiting = !sessions;
+    if (waiting) await scopeReady;
+    if (current !== activation) return;
+    if (!dataKey(CareerChatStore.KEY)) return status('ciStatus', '请重新登录后继续恢复账号内的对话。', true);
     cancelRequest();
     if (session && !persistSession()) return;
     activeRoute = route;
@@ -1265,9 +1355,11 @@
         persistSession();
       } catch (error) { status('ciStatus', error.message, true); }
     } else {
+      const draft = waiting ? message.value : '';
       session = null;
       applySession();
       if (Object.hasOwn(tasks, detail)) createSession({ prompt: prompts[detail], nextTask: detail });
+      else if (draft) { message.value = draft; scheduleDraft(); }
     }
     const storage = sessions.state();
     if (storage.error) status('ciStatus', storage.error.message || '聊天记录暂时无法保存。', true);
@@ -1282,6 +1374,8 @@
   }
 
   async function openDialog(id) {
+    await scopeReady;
+    if (!dataKey(CareerChatStore.KEY)) return status('ciStatus', '请重新登录后继续。', true);
     renderMemory();
     closeSidebar();
     const target = byId(id);
@@ -1339,7 +1433,13 @@
     showProfileReply();
     message.focus();
   };
-  window.addEventListener('career-profile-updated', () => { syncProfileChoice(); refreshSettings(); renderThread(); });
+  window.addEventListener('career-profile-updated', async () => {
+    await scopeReady;
+    syncLocalScope();
+    syncProfileChoice();
+    refreshSettings();
+    renderThread();
+  });
   byId('ciProfileUse').onclick = async () => {
     if (window.CareerProfile.state === 'load_failed') {
       await window.CareerProfile.refresh();
@@ -1355,11 +1455,14 @@
   byId('ciProfileConsentCancel').onclick = () => byId('ciProfileConsentDialog').close('cancelled');
   byId('ciProfileConsentAccept').onclick = async () => {
     const accept = byId('ciProfileConsentAccept');
+    const targetStore = sessions;
     accept.disabled = true;
     try {
-      await window.CareerProfile.ready;
+      await scopeReady;
+      if (sessions !== targetStore || !dataKey(profileConsentKey)) return;
       if (window.CareerProfile.profile) await window.CareerProfile.saveAIConsent(true);
-      localStorage.setItem(profileConsentKey, JSON.stringify({
+      if (sessions !== targetStore || !dataKey(profileConsentKey)) return;
+      writeLocal(profileConsentKey, JSON.stringify({
         granted: true, notice_version: profileConsentVersion,
         includeLegacy: byId('ciConsentIncludeLocal').checked, updated_at: new Date().toISOString(),
       }));
@@ -1449,11 +1552,13 @@
     } catch { status('ciMemoryStatus', '当前浏览器无法保存记录。', true); }
   });
   window.addEventListener('storage', event => {
-    if (event.key === profileConsentKey) {
+    if (event.key === authVersionKey && event.newValue !== authVersion) { syncLocalScope(); return; }
+    if (!sessions || event.key === null) return;
+    if (event.key === dataKey(profileConsentKey)) {
       syncProfileChoice();
       refreshSettings();
     }
-    if (event.key === storageKey) { renderMemory(); renderRouteInput(); }
+    if (event.key === dataKey(storageKey)) { renderMemory(); renderRouteInput(); }
     if (event.key === sessions.key) { sessions.reload(); renderSessions(); }
   });
   window.addEventListener('pagehide', () => { cancelRequest(); persistSession(); });

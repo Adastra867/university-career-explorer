@@ -76,7 +76,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\deploy.ps1
 
 ## 当前存储限制与环境变量
 
-该项目已经是 Express + HTML/JavaScript 的统一 Web Service，具备问卷 API、SQLite、访客会话、管理员活动权限和数据清理；不是纯静态网站。职业树与部分旧测评资料保存在浏览器本地，换设备不会自动同步。
+该项目已经是 Express + HTML/JavaScript 的统一 Web Service，具备问卷 API、SQLite、学生账号、访客会话、管理员活动权限和数据清理。职业树与部分旧测评资料保存在浏览器本地，换设备不会自动同步。
 
 **原免费服务没有持久磁盘。Render 的默认文件系统在重新部署时不保留数据，不能用作正式问卷记录库。** 本次不创建数据库、磁盘或付费实例。生产环境缺少 `CAREER_DB_PATH` 时，站点继续启动，但问卷 API 返回明确的 503 `STORAGE_NOT_CONFIGURED`，暂停云端资料收集。`/start` 与 `/admin` 保留页面并显示错误；旧页面的本地功能继续可用。不要设置临时目录来绕过这个保护。
 
@@ -96,6 +96,31 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\deploy.ps1
 | `COZE_WORKLOAD_IDENTITY_API_KEY` | 可选，现有 Coze 招聘搜索 SDK 服务端凭据；不可放进浏览器 |
 
 空白示例见根 `.env.example` 和 `journey/.env.example`。本地 `.env` 不上传；生产秘密在原 Render 服务的 Environment 中管理。启动日志、截图和文档不得包含秘密值或学生原文。
+
+## 将账号资料保存在管理员电脑
+
+学生在 `/start` 自行注册。登录成功后，Windows 资料服务根据会话所属账号加载该学生的统一资料和任务。学生可以在另一台设备用同一账号登录。注册时会创建一份独立资料，旧访客及浏览器本地记录保留在各自原有位置。
+
+管理员电脑使用单独的 SQLite 数据库。为公网学生新建空数据库，项目日常使用的 `data/career.sqlite` 可以继续作为本地资料库。下列配置可写入管理员电脑上 Git 忽略的 `.env.career-data` 文件。
+
+```dotenv
+NODE_ENV=production
+JOURNEY_LOAD_ENV=false
+PORT=5100
+CAREER_DATA_MODE=origin
+CAREER_DB_PATH=./data/career-public.sqlite
+CAREER_PUBLIC_URL=https://university-career-explorer.onrender.com
+CAREER_ALLOW_SELF_REGISTRATION=true
+CAREER_DATA_GATEWAY_KEY=
+```
+
+为 `CAREER_DATA_GATEWAY_KEY` 填写随机生成的长密钥，允许 32 至 256 个字母、数字、下划线或连字符。使用 `node --env-file=.env.career-data server.js` 启动资料服务。服务监听 `127.0.0.1:5100`。固定的 HTTPS 隧道只连接该资料服务，SQLite 文件保留在这台电脑上。
+
+使用 Tailscale 时，在资料服务启动后运行 `tailscale funnel --bg --https=8443 http://127.0.0.1:5100`。首次启用可能需要在 Tailscale 页面完成授权。隧道的公开健康检查只返回服务是否就绪，资料接口需要通过 Render 提供的服务密钥验证。 [Tailscale Funnel 文档](https://tailscale.com/docs/features/tailscale-funnel)
+
+在 Render 的 Environment 中把 `CAREER_DATA_UPSTREAM` 设置为隧道的 HTTPS 地址，并把 `CAREER_DATA_GATEWAY_KEY` 设置为同一个密钥。设置 `CAREER_TRUST_PROXY=true` 以便资料服务的登录限速可以区分客户端。重新部署后，Render 通过受认证的请求转发登录与资料操作。职业规划 AI 的模型仍由 Render 配置，只有在学生授权后才使用其统一资料。管理员电脑关机、休眠或失去连接时，账号与资料服务暂时不可用。
+
+可运行 `node tests/career-account-browser.mjs`，使用临时数据库和空白浏览器验证注册、换设备恢复、退出及账号隔离。完成隧道部署后，还需在公网使用两个虚构账号做相同验证。
 
 ## 多人问卷的最小升级
 

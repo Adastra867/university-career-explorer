@@ -6,28 +6,27 @@ import { existsSync } from 'fs';
 import { SearchClient, Config } from 'coze-coding-dev-sdk';
 import { createJourneyRouter } from './journey/server.js';
 import { createCareerRouter } from './p0/api.js';
+import { careerDataSettings, createCareerDataGateway, isCareerDataRequest, mountCareerDataOrigin } from './p0/data-gateway.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 if (process.env.JOURNEY_LOAD_ENV !== 'false' && existsSync(join(__dirname, '.env')) && typeof process.loadEnvFile === 'function') process.loadEnvFile(join(__dirname, '.env'));
 
 const app = express();
+const careerData = careerDataSettings();
+const careerGateway = careerData.upstream ? createCareerDataGateway(careerData) : null;
 let careerRouter;
 if (process.env.CAREER_TRUST_PROXY === 'true') app.set('trust proxy', 1);
-if ((process.env.NODE_ENV === 'production' || process.env.RENDER === 'true') && !process.env.CAREER_DB_PATH) {
+if (careerData.origin) {
+  careerRouter = createCareerRouter({ env: { ...process.env, NODE_ENV: 'production', CAREER_PUBLIC_URL: careerData.publicOrigin } });
+  mountCareerDataOrigin(app, careerData, careerRouter);
+} else if (careerGateway) {
+  app.use(careerGateway.middleware);
+} else if ((process.env.NODE_ENV === 'production' || process.env.RENDER === 'true') && !process.env.CAREER_DB_PATH) {
   // A free Render service has no persistent filesystem. Keep the existing site
   // online, but never accept student records into an ephemeral SQLite file.
-  const unavailableCareerPaths = [
-    '/career/status', '/guest-session', '/campaigns/:slug/public',
-    '/me/profile', '/me/profile/ai-consent', '/me/profile/import', '/me/submissions',
-    '/me/submissions/:id/withdraw', '/me/data',
-    '/intakes', '/intakes/:id', '/intakes/:id/draft',
-    '/intakes/:id/turns', '/intakes/:id/submission-preview', '/submissions',
-    '/admin/login', '/admin/session', '/admin/logout', '/admin/campaigns',
-    '/admin/campaigns/:id', '/admin/campaigns/:id/qr.svg',
-    '/admin/submissions', '/admin/submissions/:id',
-  ];
-  app.all(unavailableCareerPaths.map(path => `/api${path}`), (_req, res) => {
+  app.use((req, res, next) => {
+    if (!isCareerDataRequest(req)) return next();
     res.set('Cache-Control', 'no-store');
     res.set('X-Content-Type-Options', 'nosniff');
     res.status(503).json({ error: {
@@ -53,7 +52,7 @@ const jobRecommendationRequestTimes = new Map();
 // Independent P0 workspace. Disabling this flag leaves all legacy routes intact.
 if (process.env.JOURNEY_ENABLED !== 'false') {
   app.use('/api/journey', createJourneyRouter({
-    resolveCareerProfile: req => careerRouter
+    resolveCareerProfile: req => careerGateway ? careerGateway.resolveProfile(req) : careerRouter
       ? careerRouter.locals.resolveProfile(req)
       : { authenticated: false, consent: false, profile: null, source: 'sqlite', status: 'storage_unavailable' },
   }));
@@ -641,6 +640,7 @@ function diversifyRecommendedJobs(jobs, limit) {
   return result;
 }
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on http://0.0.0.0:${PORT}`);
+const listenAddress = careerData.origin ? '127.0.0.1' : '0.0.0.0';
+app.listen(PORT, listenAddress, () => {
+  console.log(`Server running on http://${listenAddress}:${PORT}`);
 });
