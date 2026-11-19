@@ -1186,6 +1186,7 @@
   }
 
   function deactivate() {
+    closeSettings();
     activeRoute = '';
     activation += 1;
     cancelRequest();
@@ -1282,6 +1283,7 @@
   }
 
   async function openDialog(id) {
+    closeSettings();
     renderMemory();
     closeSidebar();
     const target = byId(id);
@@ -1376,7 +1378,29 @@
     refreshSettings();
     persistSession();
   });
-  byId('ciShowSettings').onclick = () => { closeSidebar(); byId('ciContext').open = true; byId('ciSettingsButton').focus(); };
+  const settings = byId('ciContext');
+  function syncSettingsExpanded() {
+    for(const id of ['ciShowSettings','ciSettingsButton'])byId(id).setAttribute('aria-expanded',String(settings.open));
+  }
+  function closeSettings(focus=false) {
+    settings.open=false;syncSettingsExpanded();
+    if(focus)byId('ciSettingsButton').focus({preventScroll:true});
+  }
+  settings.addEventListener('toggle',syncSettingsExpanded);
+  syncSettingsExpanded();
+  byId('ciShowSettings').onclick = () => {
+    const open=!settings.open;closeSidebar();settings.open=open;syncSettingsExpanded();
+    if(open)byId('ciSettingsButton').focus({preventScroll:true});
+  };
+  byId('ciCloseSettings').onclick=()=>closeSettings(true);
+  document.addEventListener('click',event=>{
+    if(settings.open&&!settings.contains(event.target)&&!byId('ciShowSettings').contains(event.target))closeSettings();
+  });
+  document.addEventListener('keydown',event=>{
+    if(event.key==='Escape'&&settings.open&&!document.querySelector('dialog[open]')){
+      event.preventDefault();closeSettings(true);
+    }
+  });
   for (const close of document.querySelectorAll('[data-ci-close]')) close.onclick = () => close.closest('dialog').close();
   for (const modal of [byId('ciRecordsDialog'), byId('ciProfileDialog')]) {
     modal.addEventListener('click', event => { if (event.target.closest('a[href]')) modal.close(); });

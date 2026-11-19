@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
-import { SearchClient, Config } from 'coze-coding-dev-sdk';
+import { DeepSeekSearchClient, searchConfigured } from './search.js';
 
 const bundled = JSON.parse(readFileSync(new URL('./knowledge-sources.json', import.meta.url), 'utf8')).sources;
 export const ALLOWED_SEARCH_DOMAINS = Object.freeze(['postgraduate.study.cam.ac.uk', 'imperial.ac.uk', 'pmi.org', 'careers.abb']);
@@ -173,7 +173,7 @@ function liveRecords(items, now, allowedDomains) {
     const host = new URL(url).hostname;
     return [{ id: `web_${hash(url).slice(0, 24)}`, title: clean(item.title, 120) || '官方搜索资料', publisher: clean(item.site_name, 160) || host, url, content,
       publishedAt: iso(item.publish_time), checkedAt: new Date(now).toISOString(), region: '以原文项目或岗位地区为准', language: 'unknown',
-      license: '仅检索片段用于本次核查；原文版权与使用条款归发布者。', locator: 'Coze 官方域名检索片段，须打开原文复核',
+      license: '仅检索片段用于本次核查；原文版权与使用条款归发布者。', locator: 'DeepSeek 官方域名检索片段，须打开原文复核',
       trustLevel: 'unverified', category: 'live_search', refreshAfterDays: 1, keywords: [],
       applicability: '搜索摘要不是完整页面核验；须核对原文日期、项目、地区及招聘状态。' }];
   });
@@ -186,12 +186,9 @@ export function createResearchService(options = {}) {
   const sources = structuredClone(options.knowledgeSources || bundled);
   let client = options.searchClient;
   let configured = !!client;
-  if (!client && (env.COZE_API_TOKEN || env.COZE_WORKLOAD_IDENTITY_API_KEY || !options.env)) {
-    try {
-      const config = new Config({ ...(env.COZE_API_TOKEN ? { apiKey: env.COZE_API_TOKEN } : {}), timeout: timeoutMs, retryTimes: 0 });
-      configured = !!config.apiKey;
-      if (configured) client = new SearchClient(config);
-    } catch { configured = false; }
+  if (!client && searchConfigured(env)) {
+    client = new DeepSeekSearchClient({ env, timeout: timeoutMs });
+    configured = true;
   }
   function catalog() {
     const at = now();

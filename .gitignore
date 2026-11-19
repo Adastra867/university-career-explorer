@@ -35,6 +35,9 @@ logs/
 dist/
 build/
 coverage/
+.c8/
+playwright-report/
+test-results/
 .cache/
 .codegraph/
 

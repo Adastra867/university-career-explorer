@@ -1,4 +1,4 @@
-/* Resume and practice responses stay in this browser. No user text is sent to a server. */
+/* Practice records stay in this browser; online analysis requires explicit opt-in. */
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
@@ -51,7 +51,7 @@
       ['设计一节 30 分钟入门课：学习目标、互动环节和课后检验。',['目标可观察且适合基础。','活动与目标一致。','用具体任务检验理解。']],
       ['学生完成率不错，测验却不理想。你会如何诊断并调整？',['检查测验与教学目标。','分析错误类型并访谈。','补救教学后再评估。']]]}
   };
-  const blank = () => ({stage:'',role:'',industry:'',confirmed:false,jd:'',resume:'',transcript:[],written:null,interview:null,resumeReviewed:false});
+  const blank = () => ({stage:'',role:'',industry:'',confirmed:false,jd:'',resume:'',transcript:[],written:null,interview:null,resumeReviewed:false,resumeAI:null,resumeAIContext:null});
   function load() {
     try {
       const raw = JSON.parse(localStorage.getItem(STORE) || '{}');
@@ -69,9 +69,11 @@
       const interview = raw.interview;
       if (interview && Number.isInteger(interview.round) && interview.round >= 0 && interview.round < 4 &&
           Array.isArray(interview.questions) && interview.questions.length === 4 && interview.questions.every(question => typeof question === 'string')) {
-        data.interview = {round:interview.round,followup:interview.followup===true,questions:interview.questions,answer:String(interview.answer||'').slice(0,5000)};
+        data.interview = {round:interview.round,followup:interview.followup===true,questions:interview.questions,answer:String(interview.answer||'').slice(0,5000),currentQuestion:typeof interview.currentQuestion==='string'?interview.currentQuestion.slice(0,1000):null};
       }
       data.resumeReviewed = raw.resumeReviewed === true;
+      data.resumeAI = raw.resumeAI && typeof raw.resumeAI.summary === 'string' && ['strengths','issues','missingFacts'].every(key=>Array.isArray(raw.resumeAI[key])) ? raw.resumeAI : null;
+      data.resumeAIContext=typeof raw.resumeAIContext==='string'?raw.resumeAIContext:null;
       return data;
     } catch (_) { return blank(); }
   }
@@ -120,7 +122,20 @@
   }
   function text(parent,tag,value,className) { const el=document.createElement(tag);el.textContent=value;if(className)el.className=className;parent.appendChild(el);return el; }
   function result(parent,title,detail) { const box=text(parent,'div','', 'result');text(box,'strong',title);text(box,'p',detail); }
-  function requireTarget(statusId) { if (!state.stage || !state.confirmed || !state.role.trim()) { $(statusId).textContent='请先选择阶段、确认方向并填写目标岗位。';goToSprintStep(0);$('role').focus();return false; } $(statusId).textContent='';return true; }
+  function requireTarget(statusId) {
+    const missing=[];
+    if(!state.stage)missing.push('当前阶段');
+    if(!state.role.trim())missing.push('目标岗位');
+    if(!state.confirmed)missing.push('方向确认');
+    const notice=$('sprintValidation');
+    if(missing.length){
+      const message='请先补充：'+missing.join('、')+'。当前输入已保留。';
+      $(statusId).textContent=message;$('sprintValidationText').textContent=message;
+      notice.hidden=false;notice.focus({preventScroll:true});notice.scrollIntoView({block:'nearest'});
+      return false;
+    }
+    notice.hidden=true;$(statusId).textContent='';return true;
+  }
   function coreData() { try { return JSON.parse(localStorage.getItem('careerPredictor')||'{}'); } catch (_) { return {}; } }
   function importCore() {
     const core=coreData();if (!Object.keys(core).length) { $('targetStatus').textContent='没有找到现有测评资料，可手动填写。';return; }
@@ -131,7 +146,7 @@
   }
   function useExperience() {const exp=coreData().experienceText;if (typeof exp!=='string'||!exp.trim()) {$('targetStatus').textContent='现有测评中没有经历原文。';return;}if(state.resume.trim()&&!confirm('用已保存经历替换当前简历文本？'))return;state.resume=exp.slice(0,20000);$('resume').value=state.resume;save();$('targetStatus').textContent='已填入经历，请按简历格式补充教育与技能。';}
   function jdTerms(jd) {return SKILLS.filter(term=>jd.toLowerCase().includes(term.toLowerCase())).slice(0,15);}
-  function analyzeResume(restore = false) {
+  function analyzeResumeRules(restore = false) {
     if(!requireTarget('targetStatus'))return;const out=$('diagnosis');out.replaceChildren();const resume=state.resume.trim();
     if(resume.length<40){result(out,'先补充简历正文','至少写一段教育、项目或实习经历，才能给出有依据的建议。');return;}
     result(out,'本次目标：'+state.role,'把最相关的经历放在显眼位置，并用证据解释岗位匹配。');
@@ -162,13 +177,92 @@
   function showQuestion(prompt){$('questionBox').classList.remove('hidden');$('roundLabel').textContent=session.followup?`第 ${session.round+1} 轮 · 追问`:`第 ${session.round+1} / 4 轮`;$('questionText').textContent=prompt||session.questions[session.round];}
   function startInterview(){if(!requireTarget('interviewStatus'))return;if(state.transcript.length&&!confirm('开始新面试将清空当前问答记录，继续吗？'))return;state.transcript=[];session={round:0,followup:false,questions:interviewQuestions()};$('answer').value='';$('answerWrap').classList.remove('hidden');showQuestion();renderTranscript();save();$('answer').focus();}
   function evaluate(round,answer){const notes=[];if(answer.length<80)notes.push('回答较短，可补充具体场景与个人贡献。');if(round===0){if(!answer.includes(state.role.trim()))notes.push('请把经历与目标岗位联系起来。');if(!/实习|项目|科研|竞赛|课程|社团/.test(answer))notes.push('加入一段相关经历作证据。');}else if(round===1){if(!/负责|设计|分析|协调|推动|完成|开发|组织|优化|策划/.test(answer))notes.push('说清你本人采取的行动。');if(!/结果|提升|降低|交付|完成|获得|反馈|\d/.test(answer))notes.push('补充真实结果或交付物。');}else if(round===2){if(!/目标|需求|问题|指标|确认/.test(answer))notes.push('先确认目标和成功标准。');if(!/验证|复盘|反馈|测试|评估|数据|结果/.test(answer))notes.push('说明如何验证方案。');}else if(!/团队|业务|岗位|目标|协作|成长|考核|项目/.test(answer))notes.push('反问可聚焦团队任务、岗位成功标准或协作。');if(!notes.length)notes.push('结构基本完整，继续用可核实的细节增强说服力。');return notes;}
-  function submitAnswer(){if(!session)return;const answer=$('answer').value.trim();if(answer.length<12){$('interviewStatus').textContent='请先写出至少一句完整回答。';return;}const notes=evaluate(session.round,answer);state.transcript.push({question:$('questionText').textContent,answer,feedback:notes.join(' ')});$('answer').value='';renderTranscript();$('interviewStatus').textContent='';if(session.followup){session.followup=false;session.round++;}else if(session.round===1&&notes.some(n=>/本人采取|真实结果/.test(n))){session.followup=true;showQuestion('追问：请补充你本人采取的关键行动，以及可核实的结果或反馈。');save();$('answer').focus();return;}else session.round++;if(session.round>=4){session=null;$('questionBox').classList.add('hidden');$('answerWrap').classList.add('hidden');$('interviewStatus').textContent='四轮练习已完成，可下载记录后重练。';save();return;}showQuestion();save();$('answer').focus();}
+  let pendingAI = null;
+  function cancelAI() { pendingAI?.abort(); }
+  function prepFingerprint() { return JSON.stringify([state.stage,state.role,state.confirmed,state.jd,state.resume]); }
+  async function requestAI(payload, statusId) {
+    if (pendingAI) throw new Error('已有 AI 请求正在进行。');
+    const controller = new AbortController(); pendingAI = controller;
+    const timer = setTimeout(() => controller.abort(), 55000);
+    ['analyzeBtn','submitBtn','startBtn'].forEach(id => $(id).disabled = true);
+    $('cancelPrepAI').hidden = false;$('cancelPrepAI').classList.remove('hidden');
+    $(statusId).textContent = 'AI 分析中，输入与规则结果已保留…';
+    try {
+      const response = await fetch('/api/journey/career-prep/analyze', {
+        method:'POST', headers:{'Content-Type':'application/json'}, signal:controller.signal,
+        body:JSON.stringify({...payload, consent:true, role:state.role, jd:state.jd})
+      });
+      const data = await response.json();
+      if (!response.ok || data.mode !== 'online_ai') throw new Error(data.error || '在线 AI 暂不可用');
+      return data.result;
+    } finally {
+      clearTimeout(timer); pendingAI = null;
+      ['analyzeBtn','submitBtn','startBtn'].forEach(id => $(id).disabled = false);
+      $('cancelPrepAI').hidden = true;$('cancelPrepAI').classList.add('hidden');
+    }
+  }
+  function renderAIResume(value) {
+    const out=$('diagnosis');out.replaceChildren();
+    result(out,'AI 简历诊断 · 建议需人工核实',value.summary);
+    (value.strengths||[]).forEach(item=>result(out,'材料中的优势',item));
+    (value.issues||[]).forEach(item=>{
+      result(out,'原文',item.quote);result(out,'问题与修改建议',item.problem+' '+item.suggestion);
+      if(item.rewrite)result(out,'改写参考 · 核对后使用',item.rewrite);
+    });
+    (value.missingFacts||[]).forEach(item=>result(out,'请补充真实信息',item));
+  }
+  async function analyzeResume(restore = false) {
+    if(!restore)state.resumeReviewed=false;
+    analyzeResumeRules(restore);
+    if (restore) { if(state.resumeReviewed && state.resumeAI && state.resumeAIContext===prepFingerprint())renderAIResume(state.resumeAI);return; }
+    state.resumeAI=null;
+    if(!state.stage||!state.confirmed||!state.role.trim())return;
+    if (!$('prepAIEnabled').checked || !state.resumeReviewed || state.resume.trim().length<40) {
+      $('sprintAIStatus').textContent='当前显示本地规则诊断，未调用在线 AI。';save(false);return;
+    }
+    const fingerprint=prepFingerprint();
+    try {
+      const value=await requestAI({task:'resume',resume:state.resume},'sprintAIStatus');
+      if(prepFingerprint()!==fingerprint){$('sprintAIStatus').textContent='材料已变更，旧 AI 结果未应用，请重新诊断。';return;}
+      state.resumeAI=value;state.resumeAIContext=fingerprint;renderAIResume(value);save(false);
+      $('sprintAIStatus').textContent='AI 诊断完成；改写仅供参考，请核对所有事实。';
+    }catch(error){$('sprintAIStatus').textContent=error.name==='AbortError'?'AI 已取消或超时，保留输入和规则诊断。':'在线 AI 未完成，保留规则诊断。'+error.message;}
+  }
+  async function submitAnswer(){
+    if(!session||pendingAI)return;
+    const answer=$('answer').value.trim();
+    if(answer.length<12){$('interviewStatus').textContent='请先写出至少一句完整回答。';return;}
+    const active=session,question=$('questionText').textContent,fingerprint=prepFingerprint();
+    let notes=evaluate(session.round,answer),mode='本地规则',followUp='';
+    // Preserve the submitted answer before waiting for a network response.
+    save(false);
+    if($('prepAIEnabled').checked){
+      try{
+        const value=await requestAI({task:'interview',question,answer,allowFollowUp:!active.followup},'interviewStatus');
+        notes=[...value.strengths.map(x=>'优点：'+x),...value.feedback];followUp=value.followUp;mode='在线 AI';
+      }catch(error){
+        if(error.name==='AbortError'){$('interviewStatus').textContent='AI 已取消或超时，当前回答已保留，可重试或关闭 AI 后提交规则练习。';save(false);return;}
+        mode='规则降级';$('interviewStatus').textContent='AI 未完成，以下使用规则反馈。'+error.message;
+      }
+    }
+    if(session!==active||prepFingerprint()!==fingerprint||$('answer').value.trim()!==answer){$('interviewStatus').textContent='回答或目标已变更，旧反馈未应用，当前输入已保留。';return;}
+    state.transcript.push({question,answer,feedback:'【'+mode+'】'+notes.join(' ')});
+    $('answer').value='';renderTranscript();
+    const ruleFollowup=mode!=='在线 AI'&&active.round===1&&notes.some(n=>/本人采取|真实结果/.test(n));
+    if(!active.followup&&(followUp||ruleFollowup)){
+      active.followup=true;active.currentQuestion=followUp||'追问：请补充你本人采取的关键行动，以及可核实的结果或反馈。';
+      showQuestion(active.currentQuestion);save();$('answer').focus();return;
+    }
+    active.followup=false;active.currentQuestion=null;active.round++;
+    if(active.round>=4){session=null;$('questionBox').classList.add('hidden');$('answerWrap').classList.add('hidden');$('interviewStatus').textContent='四轮练习已完成，可下载记录后重练。';save();return;}
+    showQuestion();save();$('answer').focus();
+  }
   function renderTranscript(){const box=$('transcript');box.replaceChildren();if(!state.transcript.length)return;text(box,'h3','问答记录与反馈');state.transcript.forEach((turn,i)=>{const item=text(box,'div','', 'turn');text(item,'small','问题 '+(i+1));text(item,'p',turn.question);text(item,'small','你的回答');text(item,'p',turn.answer);text(item,'div',turn.feedback||'', 'feedback');});}
   function download(name,content,type){const url=URL.createObjectURL(new Blob([content],{type}));const link=document.createElement('a');link.href=url;link.download=name;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   function exportRecord(){if(!state.transcript.length&&!state.written){$('interviewStatus').textContent='请先练习面试或生成笔试题。';return;}const lines=[`目标岗位：${state.role}`,`阶段：${state.stage}`,`导出时间：${new Date().toLocaleString('zh-CN')}`,''];state.transcript.forEach((t,i)=>lines.push(`${i+1}. ${t.question}`,`回答：${t.answer}`,`反馈：${t.feedback}`,''));if(state.written){lines.push(`笔试练习：${state.written.industry} · ${state.written.group}`,'');state.written.questions.forEach((q,i)=>lines.push(`第 ${i+1} 题：${q.prompt}`,`回答：${state.written.answers[i]||'未作答'}`,`参考要点：${q.points.join('；')}`,''));}download('求职练习记录.txt',lines.join('\n'),'text/plain;charset=utf-8');}
   function renderSources(){const box=$('sources');KNOWLEDGE.forEach(item=>{const card=text(box,'div','', 'source');const link=text(card,'a',item.topic+' · '+item.title+' ↗');link.href=item.url;link.target='_blank';link.rel='noopener noreferrer';text(card,'p',item.points.join(' '));});}
   function fill(){['stage','role','industry','jd','resume'].forEach(id=>$(id).value=state[id]);$('confirmed').checked=state.confirmed;renderTranscript();renderWritten();}
-  ['stage','role','industry','jd','resume'].forEach(id=>$(id).addEventListener('input',()=>{state[id]=$(id).value;state.resumeReviewed=false;save();}));$('confirmed').addEventListener('change',()=>{state.confirmed=$('confirmed').checked;save();});
+  ['stage','role','industry','jd','resume'].forEach(id=>$(id).addEventListener('input',()=>{state[id]=$(id).value;cancelAI();state.resumeReviewed=false;state.resumeAI=null;$('sprintAIStatus').textContent='资料已修改，请重新诊断；此前分析不再适用。';save();}));$('confirmed').addEventListener('change',()=>{state.confirmed=$('confirmed').checked;cancelAI();state.resumeAI=null;state.resumeReviewed=false;save();});
     document.querySelectorAll('[data-sprint-step]').forEach(link => link.addEventListener('click', event => {
     event.preventDefault();
     goToSprintStep(sprintSteps.indexOf(link.dataset.sprintStep));
@@ -176,9 +270,13 @@
   window.addEventListener('popstate', showSprintStep);
   $('sprintBack').onclick = () => goToSprintStep(sprintStep - 1);
   $('sprintSave').onclick = () => { if (save()) $('sprintSaveStatus').textContent = '草稿已保存在当前浏览器。'; };
-  $('sprintNext').onclick = () => sprintStep < 2 ? goToSprintStep(sprintStep + 1) : exportRecord();
+  $('sprintNext').onclick = () => {if(sprintStep===0&&!requireTarget('targetStatus'))return;sprintStep<2?goToSprintStep(sprintStep+1):exportRecord();};
+  $('sprintFixTarget').onclick=()=>{goToSprintStep(0);const missing=!state.stage?'stage':!state.role.trim()?'role':'confirmed';$(missing).focus();};
   $('answer').addEventListener('input', () => save());
   $('importBtn').addEventListener('click',importCore);$('experienceBtn').addEventListener('click',useExperience);$('analyzeBtn').addEventListener('click',()=>analyzeResume());$('startBtn').addEventListener('click',startInterview);$('submitBtn').addEventListener('click',submitAnswer);$('generateWrittenBtn').addEventListener('click',generateWritten);$('reviewWrittenBtn').addEventListener('click',reviewWritten);$('exportBtn').addEventListener('click',exportRecord);$('downloadKbBtn').addEventListener('click',()=>download('职途星轨-求职知识包.json',JSON.stringify({title:'职途星轨求职知识包',description:'本站根据公开资料整理的练习要点，请通过链接阅读原文。',items:KNOWLEDGE},null,2),'application/json;charset=utf-8'));
+  $('cancelPrepAI').addEventListener('click',cancelAI);
+  $('prepAIEnabled').addEventListener('change',cancelAI);
+  $('answer').addEventListener('input',()=>{cancelAI();save(false);});
   // The shared profile supplies public background; practice transcripts remain local.
   function applySharedProfile(profile) {
     if (!profile?.fields) return;
@@ -195,7 +293,7 @@
     const intake=window.CareerProfile?.currentIntake;
     if (intake?.conditions?.jd && !state.jd) state.jd=intake.conditions.jd;
     const changed = previous !== [state.resume, state.stage, state.role, state.jd].join('\u0000');
-    if (changed) state.resumeReviewed = false;
+    if (changed) {cancelAI();state.resumeReviewed=false;state.resumeAI=null;}
     fill();
     sprintStatus();
     $('targetStatus').textContent='已读取全站统一资料。资料变化后，请重新诊断；本地练习记录仍保留。';
@@ -206,7 +304,7 @@
   if (session) {
     $('answer').value = session.answer;
     $('answerWrap').classList.remove('hidden');
-    showQuestion(session.followup ? '追问：请补充你本人采取的关键行动，以及可核实的结果或反馈。' : undefined);
+    showQuestion(session.followup ? session.currentQuestion || '追问：请补充你本人采取的关键行动，以及可核实的结果或反馈。' : undefined);
   }
   showSprintStep();
   if (state.resumeReviewed && state.stage && state.role && state.confirmed) analyzeResume(true);

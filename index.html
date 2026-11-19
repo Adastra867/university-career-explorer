@@ -205,7 +205,7 @@
         <label class="ci-session-search"><svg class="ci-icon" aria-hidden="true"><use href="#ci-icon-search"/></svg><input id="ciSessionSearch" type="search" placeholder="搜索对话" aria-label="搜索最近对话" autocomplete="off"></label>
         <div id="ciSessions" class="ci-sessions" aria-label="最近对话列表"></div>
         <div class="ci-sidebar-footer">
-          <button id="ciShowSettings" type="button"><svg class="ci-icon" aria-hidden="true"><use href="#ci-icon-settings"/></svg><span>资料与分析设置</span></button>
+          <button id="ciShowSettings" type="button" aria-controls="ciSettingsPanel" aria-expanded="false"><svg class="ci-icon" aria-hidden="true"><use href="#ci-icon-settings"/></svg><span>资料与分析设置</span></button>
         </div>
       </aside>
       <div id="ciChatMain" class="ci-chat-main">
@@ -261,7 +261,7 @@
               <details id="ciContext" class="ci-context">
                 <summary id="ciSettingsButton" aria-controls="ciSettingsPanel"><svg class="ci-icon" aria-hidden="true"><use href="#ci-icon-settings"/></svg><span>资料与分析设置</span></summary>
                 <div id="ciSettingsPanel" class="ci-settings-panel">
-                  <h3>资料与分析设置</h3>
+                  <div class="ci-settings-heading"><h3>资料与分析设置</h3><button id="ciCloseSettings" type="button" class="ci-icon-button" aria-label="关闭资料与分析设置">×</button></div>
                   <p class="ci-muted">勾选后，对应资料用于本次在线分析。</p>
                   <label><input type="checkbox" id="ciUseProfile"> 本次参考已授权的个人资料</label>
                   <label><input type="checkbox" id="ciUseLocalProfile"> 同时参考本机旧测评与经历（需授权）</label>

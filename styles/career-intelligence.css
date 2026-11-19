@@ -344,3 +344,8 @@ body.ci-sidebar-collapsed .ci-sidebar { visibility: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .ci-workspace *, .ci-workspace *::before, .ci-workspace *::after { animation: none !important; transition: none !important; }
 }
+
+/* Explicitly hide collapsed panels and provide an obvious dismissal control. */
+.ci-context:not([open]) > .ci-settings-panel { display: none; }
+.ci-settings-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ci-settings-heading h3 { margin: 0; }

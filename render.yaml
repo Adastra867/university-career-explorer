@@ -1,9 +1,29 @@
 services:
   - type: web
-    name: university-career-explorer
+    name: university-career-explorer-demo
+    branch: demo-deploy
     runtime: node
     plan: free
-    buildCommand: pnpm install --frozen-lockfile
+    buildCommand: corepack enable && corepack prepare pnpm@11.25.0 --activate && pnpm install --frozen-lockfile
     startCommand: pnpm start
     healthCheckPath: /
-    autoDeployTrigger: commit
+    autoDeployTrigger: off
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NODE_ENV
+        value: production
+      - key: JOURNEY_LOAD_ENV
+        value: "false"
+      - key: CAREER_TRUST_PROXY
+        value: "true"
+      - key: JOURNEY_AI_PROVIDER
+        value: deepseek
+      - key: JOURNEY_AI_BASE_URL
+        value: https://api.deepseek.com
+      - key: JOURNEY_AI_MODEL
+        value: deepseek-flash
+      - key: JOURNEY_AI_API_KEY
+        sync: false
+      - key: DEEPSEEK_SEARCH_ENABLED
+        value: "true"

@@ -1,3 +1,4 @@
+import { installCareerPrepRoutes } from './career-prep-server.js';
 import express from 'express';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { validateGraph, validateProposal, pathsTo } from './graph.js';
@@ -386,6 +387,7 @@ export function createJourneyRouter(options = {}) {
   };
   installV11Routes(router, aiDependencies);
   installCareerIntelligenceRoute(router, aiDependencies);
+  installCareerPrepRoutes(router, aiDependencies);
 
   router.use((error, req, res, next) => {
     // A disconnected browser has nobody to respond to. Passing this error on

@@ -3,7 +3,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { createHash } from 'crypto';
 import { existsSync } from 'fs';
-import { SearchClient, Config } from 'coze-coding-dev-sdk';
+import { DeepSeekSearchClient } from './journey/search.js';
 import { createJourneyRouter } from './journey/server.js';
 import { createCareerRouter } from './p0/api.js';
 
@@ -389,18 +389,8 @@ app.post('/api/fetch-jd', async (req, res) => {
 
     const client = createSearchClient();
 
-    const response = await withTimeout(client.advancedSearch(url, {
-      count: 1,
-      needContent: true,
-      needSummary: false,
-    }), JOB_SEARCH_TIMEOUT_MS);
-
-    const items = response.web_items || [];
-    if (items.length > 0 && items[0].content) {
-      res.json({ success: true, content: items[0].content, title: items[0].title });
-    } else {
-      res.json({ success: true, content: items[0]?.snippet || '', title: items[0]?.title || '' });
-    }
+    const page = await client.fetchPage(url);
+    res.json({ success: true, ...page });
   } catch (error) {
     console.error('Fetch JD unavailable.');
     res.status(503).json({ success: false, code: isSearchConfigurationError(error) ? 'SEARCH_NOT_CONFIGURED' : 'SEARCH_UNAVAILABLE', error: '暂时无法读取岗位详情，请打开原始页面复制 JD。' });
@@ -443,12 +433,11 @@ function safeContent(value, maxLength = 4000) {
 }
 
 function createSearchClient() {
-  const config = new Config({ timeout: JOB_SEARCH_TIMEOUT_MS, retryTimes: 0 });
-  return new SearchClient(config);
+  return new DeepSeekSearchClient({ timeout: JOB_SEARCH_TIMEOUT_MS });
 }
 
 function isSearchConfigurationError(error) {
-  return /API key is required|COZE_API_TOKEN|apiKey/i.test(String(error?.message || ''));
+  return error?.code === 'SEARCH_NOT_CONFIGURED';
 }
 
 function withTimeout(promise, timeoutMs) {
