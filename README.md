@@ -1,6 +1,6 @@
 # 职途星轨
 
-临时展示分支部署请先阅读 [展示部署说明](docs/DEMO_DEPLOYMENT.md)。当前分支的 render.yaml 面向 Free 展示，默认不启用学生资料库。
+临时展示分支部署请先阅读 [展示部署说明](docs/DEMO_DEPLOYMENT.md)。当前分支的 render.yaml 面向 Free 展示，启用临时 SQLite；只使用虚构资料，管理员凭据须在 Render 安全配置。
 
 职途星轨面向大学生，提供职业方向探索、能力画像、岗位匹配和求职练习。职业规划 AI 支持按对话整理信息、比较选择和制定计划。项目使用 Express 和原生 HTML、CSS、JavaScript。
 

@@ -5,7 +5,7 @@ services:
     runtime: node
     plan: free
     buildCommand: corepack enable && corepack prepare pnpm@11.25.0 --activate && pnpm install --frozen-lockfile
-    startCommand: pnpm start
+    startCommand: pnpm admin:init && pnpm start
     healthCheckPath: /
     autoDeployTrigger: off
     envVars:
@@ -27,3 +27,15 @@ services:
         sync: false
       - key: DEEPSEEK_SEARCH_ENABLED
         value: "true"
+      - key: CAREER_DEMO_MODE
+        value: "true"
+      - key: CAREER_DB_PATH
+        value: /tmp/career-demo/career.sqlite
+      - key: CAREER_PUBLIC_URL
+        value: https://university-career-explorer-demo.onrender.com
+      - key: CAREER_ADMIN_USERNAME
+        sync: false
+      - key: CAREER_ADMIN_PASSWORD
+        sync: false
+      - key: CAREER_ADMIN_DISPLAY_NAME
+        value: 小组展示管理员

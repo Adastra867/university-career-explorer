@@ -120,7 +120,7 @@ export function createCareerRouter(options = {}) {
     }
     next();
   });
-  router.get('/career/status', (_req,res) => res.json({schema_version:1,notice_version:NOTICE_VERSION,retention_days:days,storage:'sqlite',ai_configured:aiStatus(env).configured}));
+  router.get('/career/status', (_req,res) => res.json({schema_version:1,notice_version:NOTICE_VERSION,retention_days:days,storage:'sqlite',ephemeral:env.CAREER_DEMO_MODE==='true',ai_configured:aiStatus(env).configured}));
   router.post('/guest-session', (req,res) => {
     rate(`guest:${req.ip}`,60);
     let g;

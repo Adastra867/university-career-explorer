@@ -9,7 +9,7 @@
 - 类型：Node Web Service；Free；单实例
 - Node：24（.node-version 和 NODE_VERSION 均固定）
 - 构建：`corepack enable && corepack prepare pnpm@11.25.0 --activate && pnpm install --frozen-lockfile`
-- 启动：`pnpm start`
+- 启动：`pnpm admin:init && pnpm start`（演示管理员凭据必须先配置）
 - 健康检查：`/`
 - 自动部署：关闭；确认提交 SHA 后手动部署
 
@@ -28,6 +28,12 @@ render.yaml 描述的是展示服务；手动创建时需在控制台填写相�
 | JOURNEY_AI_MODEL | deepseek-flash |
 | JOURNEY_AI_API_KEY | 由所有者在 Render 安全填写有效密钥 |
 | DEEPSEEK_SEARCH_ENABLED | true |
+| CAREER_DEMO_MODE | true |
+| CAREER_DB_PATH | /tmp/career-demo/career.sqlite |
+| CAREER_PUBLIC_URL | https://university-career-explorer-demo.onrender.com |
+| CAREER_ADMIN_USERNAME | 所有者自行设置的管理员用户名 |
+| CAREER_ADMIN_PASSWORD | 所有者在 Render 安全填写，至少12位 |
+| CAREER_ADMIN_DISPLAY_NAME | 小组展示管理员 |
 
 不上传本地 .env，不填 COZE_API_TOKEN，搜索复用有效的 DeepSeek 模型密钥。也可用 DEEPSEEK_SEARCH_API_KEY 单独设置搜索密钥；聊天和搜索均有调用费用。
 
@@ -35,9 +41,11 @@ render.yaml 描述的是展示服务；手动创建时需在控制台填写相�
 
 本配置提供方向探索、测评/报告、职业规划 AI、职业树、实时岗位搜索与求职冲刺。浏览器保存的资料仍在当前浏览器，localhost 数据不会自动迁移到公网域名。
 
-默认不设置 CAREER_DB_PATH：生产模式暂停学生任务资料库与管理员 API（503 STORAGE_NOT_CONFIGURED），防止将真实资料写入免费实例临时磁盘。这不影响上述核心展示模块。
+当前展示配置启用临时 SQLite，包含统一资料、四任务、管理员活动和学生提交。数据库位于 /tmp/career-demo/career.sqlite，免费服务休眠、重启、重新部署后可能丢失。只使用虚构演示材料；页面会明确显示临时存储提示。资料界面中的默认90天是应用清理上限，不是免费环境的保存保证。
 
-若明确需要演示学生提交与管理员活动，另行设置 CAREER_DB_PATH=/tmp/career-demo/career.sqlite、CAREER_PUBLIC_URL=实际HTTPS地址，以及独立演示管理员凭据；启动时先执行 pnpm admin:init。每次初始化会撤销该管理员旧会话。免费实例休眠、重启和重新部署可能丢失数据库，必须仅使用虚构数据。不要把临时配置当作正式资料收集方案。
+管理员用户名及独立密码由所有者在 Render 填写，不提供公共默认账号。启动阶段先运行 pnpm admin:init，再运行网站；数据库丢失后会自动重建结构和该管理员。每次初始化会更新该管理员密码并撤销旧管理员会话，但不会主动删除活动/学生数据。不要在构建阶段初始化数据库。
+
+若只想展示不涉及资料库的页面，可以恢复启动命令 pnpm start 并移除 CAREER_DB_PATH，此时保留原生产存储保护。正式使用需持久磁盘或迁移托管数据库，不应使用本临时配置。
 
 ## 发布前后检查
 
