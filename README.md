@@ -1,21 +1,40 @@
 # 职途星轨
 
-职途星轨面向大学生，提供职业方向探索、能力画像、岗位匹配和求职练习。职业规划 AI 支持按对话整理信息、比较选择和制定计划。项目使用 Express 和原生 HTML、CSS、JavaScript。
+**大学生职业规划 AI 与求职练习平台**
 
-## 页面与功能
+> 我还没定目标岗位，大学这几年可以先做什么？等我拿到一份招聘简章，又该怎样改简历、讲清自己的项目？
 
-| 入口 | 功能 |
-| --- | --- |
-| `/` | 方向探索、软硬实力分析、岗位推荐、手动 JD 匹配、报告与测评历史。 |
-| `/index.html#intelligence` | 职业规划 AI。支持多轮对话、搜索或管理会话、资料导入、个人画像、方向探索、阶段计划、路线比较和成长建议。可将分析保存到“我的规划记录”。 |
-| `/job-search.html` | 按关键词搜索岗位，查看岗位详情和匹配依据。实时岗位检索依赖服务端搜索配置。 |
-| `/career-prep.html` | 简历诊断、行业和岗位笔试、模拟面试及练习记录下载。练习由浏览器本地规则生成。 |
-| `/trees` | 创建和编辑职业树，在画布中组织节点、查看路线和比较选择。 |
-| `/start`、`/admin` | 学生注册与登录、按账号恢复统一资料、轻量职业建议、任务草稿、活动提交与管理。公网账号可将资料保存到管理员电脑。 |
+职途星轨把这两个问题放在同一条路线里。大一、大二可以先做一次小体验，再从自己的兴趣和经历出发选方向。进入实习或校招准备时，可以拿具体岗位要求核对经历，再围绕同一个岗位改简历、练笔试和面试。职业规划 AI 贯穿这四步，学生做过新项目或收到新反馈后，可以回来调整计划。
+
+[打开职业规划 AI](https://university-career-explorer.onrender.com/index.html#intelligence) · [进入网站首页](https://university-career-explorer.onrender.com/)
+
+## 从成长路线到面试帮助
+
+### 1. 成长路线｜我还没定方向，这周能先做什么？
+
+打开「制定成长路线」，输入一句「帮我制定未来三年的成长路线」就能开始。职业规划 AI 会结合已知信息和假设给出分阶段建议，并把第一步落到一个能尝试的行动上。例如，挑两个感兴趣的方向，各花半天做一次入门体验。之后可以补充经历、比较路线，或把结果存进「我的规划记录」。 [制定成长路线](https://university-career-explorer.onrender.com/index.html#intelligence)
+
+### 2. 方向｜有几条路都感兴趣，我想先试哪条？
+
+根据学历、专业和就业倾向查看方向卡，从中选 3–5 个备选，把最想验证的放在第一位。软实力测评用 25 项自评和 6 道情境题观察偏好与行动方式，情境题按规则生成能力雷达。硬实力解析从课程、科研、实习或项目原文中识别技能线索，方便学生回到材料核对自己具体做过什么。排序可以在实践后修改。 [方向探索](https://university-career-explorer.onrender.com/index.html#direction) · [能力画像](https://university-career-explorer.onrender.com/index.html#ability)
+
+### 3. 岗位｜我该搜什么？这份招聘要求又能对上几项？
+
+「推荐岗位」根据方向意向和能力线索给出可检索的岗位名称。看到感兴趣的招聘简章后，可以把岗位描述（JD）粘贴到「分析 JD」，逐项查看材料里的证据和缺口。覆盖率表示材料中体现的要求比例。若材料漏写了做过的事，就补上项目证据。需要学习的部分可以放进后续计划。实时岗位检索依赖服务端搜索配置。 [推荐岗位](https://university-career-explorer.onrender.com/index.html#jobs) · [分析 JD](https://university-career-explorer.onrender.com/index.html#jobs/manual)
+
+### 4. 面试帮助｜面试官问「你具体做了什么」，我怎么答？
+
+「求职冲刺」围绕选定的岗位提供简历诊断、三道笔试练习和四轮模拟面试。比如第一次只说「我参与了校园报名数据项目」，系统会追问本人采取了什么行动、最后交付了什么。再次回答时，就能具体说出怎样用 Python 和 SQL 清洗数据、用 Excel 制图，以及怎样交付报告。问题、追问和反馈由浏览器本地规则生成，练习记录可下载。讲不清的地方可以带回职业规划 AI，变成下一次练习目标，例如「下周怎样练习用一分钟解释这张图？」 [求职冲刺](https://university-career-explorer.onrender.com/career-prep.html)
+
+## 其他入口
+
+- [职业树](https://university-career-explorer.onrender.com/trees)支持在画布上整理职业节点、比较路线和继续探索。
+- [岗位搜索](https://university-career-explorer.onrender.com/job-search.html)支持按关键词查找岗位及查看匹配依据。
+- [统一资料](https://university-career-explorer.onrender.com/start)支持学生注册、登录、保存任务草稿和恢复账号资料，可按需授权职业规划 AI 参考个人资料。活动组织者通过 `/admin` 管理活动和学生主动提交的资料。
 
 ## 本地运行
 
-需要 Node.js 24+ 与 pnpm。数据库使用 Node 内置 SQLite，默认保存到 `data/career.sqlite`。服务启动时自动执行 `p0/migrations/` 下的数据库迁移。
+项目使用 Express 和原生 HTML、CSS、JavaScript。运行需要 Node.js 24+ 与 pnpm。数据库使用 Node 内置 SQLite，默认保存到 `data/career.sqlite`。服务启动时自动执行 `p0/migrations/` 下的数据库迁移。
 
 ```powershell
 pnpm install --frozen-lockfile
