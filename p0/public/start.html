@@ -6,6 +6,28 @@
 <body data-career-page="profile">
 <main class="wrap"><div class="career-heading-art mb-4"><p class="career-task-progress" id="intakeProgress">第 1 步 · 了解资料如何使用</p><img id="compareArtwork" src="/assets/career/career-compare.webp" alt="" width="360" height="360" loading="lazy" hidden></div>
 <div id="campaignBanner" class="banner" aria-live="polite"><p>普通访问：进度仅供本人继续使用。通过活动链接进入后，可预览并提交给指定管理员。</p></div>
+<section id="accountAccess" class="card account-access" aria-labelledby="accountTitle" hidden>
+  <h2 id="accountTitle">学生账号</h2>
+  <div id="accountSignedIn" hidden>
+    <p>已登录 <strong id="accountUsername"></strong>。换设备后，使用同一账号可继续查看自己的统一资料和任务。</p>
+    <button type="button" class="secondary" id="accountLogout">退出登录</button>
+  </div>
+  <form id="accountForm" aria-labelledby="accountFormTitle">
+    <h3 id="accountFormTitle">登录账号</h3>
+    <label class="field"><span>用户名</span><input id="accountUser" name="username" required maxlength="48" autocomplete="username" autocapitalize="none" spellcheck="false"></label>
+    <label class="field"><span>密码</span><input id="accountPassword" name="password" type="password" required maxlength="200" autocomplete="current-password"></label>
+    <div id="accountRegisterFields" hidden>
+      <p class="muted small">用户名需为 3–48 个字符，以字母或数字开头，可使用小写英文字母、数字、点、下划线和短横线。密码至少 12 个字符。</p>
+      <details class="account-notice"><summary>了解账号资料如何使用</summary><p class="muted small">统一资料和任务保存在本项目的数据服务中，可登录同一账号继续使用。你可以在「我的提交」删除账号及资料。管理员可以查看你明确提交的活动快照。在线分析会将本次所需的输入发送给模型处理。</p></details>
+      <label class="check"><input type="checkbox" id="accountConsent"><span>我已了解资料使用说明，同意保存本账号的统一资料和任务。</span></label>
+    </div>
+    <div class="actions">
+      <button type="submit" class="primary" id="accountSubmit">登录</button>
+      <button type="button" class="link-button" id="accountToggle" hidden>创建账号</button>
+    </div>
+  </form>
+  <p class="status" id="accountStatus" role="status"></p>
+</section>
 <section id="notice" class="card notice" aria-labelledby="noticeTitle"><h2 id="noticeTitle">开始前，了解资料如何使用</h2><p>你的输入用于整理个人资料和生成当前任务的建议。点击继续后，资料与草稿保存在服务器，同一浏览器可继续使用；清除 Cookie 或换设备后不保证恢复。</p><p>若服务已配置在线 AI，点击生成、回答追问或重新分析时，会把本次所需文字发送给模型处理。请移除无关的证件号码、联系方式等信息。规则模式会明确标注。</p><p><strong>保存进度只供本人使用。管理员仅在你查看共享预览、再明确提交后，才能看到本次共享快照。</strong>你可以撤回共享，或删除本人云端资料。</p><button id="consentBtn" class="primary" type="button">了解并继续</button><p id="noticeStatus" class="status" role="status"></p></section>
 <div id="workspace" hidden><p id="sessionInfo" class="retention"></p><div id="globalStatus" class="status" role="status" aria-live="polite"></div>
 <details id="intakeTaskPicker"><summary>选择建议任务</summary><div class="task-grid" id="taskGrid">

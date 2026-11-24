@@ -2,18 +2,63 @@
 (() => {
   'use strict';
   const NOTICE='careerP0Notice', LAST='careerP0LastIntake', PENDING='careerP0PendingProfileFields';
+  const AUTH_CHANGE='careerP0AuthChange', ACCOUNT_ACTIVE='careerP0AccountActive';
   const LOCAL_FIELD = 'careerPersonalField:';
   const fieldPaths = ['education.stage', 'education.degree', 'education.major', 'education.school',
     'experience.text', 'skills.self_report', 'preferences.long_term_goal', 'preferences.city'];
   let csrf='',consented=false,queue=Promise.resolve(),timer=null,deleted=false,flushing=false;
-  let refreshError = null;
+  let refreshError = null, generation = 0;
   const changedFields=new Map();
-  const adapter={profile:null,currentIntake:null,ready:null,state:'loading',refresh,update,updateMany,readFields,readLocalFields,saveField,saveAIConsent,isEditing:path=>changedFields.has(path)};
+  const adapter={account:null,profile:null,currentIntake:null,ready:null,state:'loading',refresh,update,updateMany,readFields,readLocalFields,saveField,saveAIConsent,isEditing:path=>changedFields.has(path)};
   window.CareerProfile=adapter;
   function marker(){try{return localStorage.getItem(NOTICE)==='p0-v1';}catch{return false;}}
+  function accountMode() {
+    if (adapter.account) return true;
+    try { return localStorage.getItem(ACCOUNT_ACTIVE)==='yes'; }
+    catch { return false; }
+  }
+  function authVersion() {
+    try { return localStorage.getItem(AUTH_CHANGE); }
+    catch { return null; }
+  }
+  const openedAuthVersion = authVersion();
+  function setProfile(profile, account = profile?.account || null) {
+    if (account?.id !== adapter.account?.id) {
+      csrf = '';
+      adapter.currentIntake = null;
+      changedFields.clear();
+      clearTimeout(timer);
+      try { sessionStorage.removeItem(PENDING); } catch {}
+    }
+    adapter.account = account;
+    adapter.profile = profile;
+  }
   function note(message,isError=false){const node=document.getElementById('careerProfileStatus');if(node){node.textContent=message;node.style.color=isError?'#b91c1c':'#475569';}}
-  async function request(path,method='GET',body){const response=await fetch('/api'+path,{method,credentials:'same-origin',cache:'no-store',headers:{...(method!=='GET'?{'Content-Type':'application/json','X-CSRF-Token':csrf}:{})},...(method!=='GET'?{body:JSON.stringify(body??{})}:{})});let payload;try{payload=await response.json();}catch{throw new Error('统一资料服务暂不可用，请保留当前文字。');}if(!response.ok){const error=new Error(payload.error?.message||'统一资料保存失败。');error.status=response.status;error.code=payload.error?.code;throw error;}return payload;}
-  async function ensureSession(){if(csrf)return;if(!consented&&!marker()){if(!confirm('启用统一资料云保存后，你接下来主动修改的公共资料会保存在服务器，并供方向探索、岗位匹配、JD 分析和求职冲刺复用。旧资料不会自动上传；管理员仅在你预览并明确提交后可见。在线 AI 仅在轻量入口主动生成时调用。是否继续？'))throw new Error('本次修改仍保留在本页，尚未上传。');}const session=await request('/guest-session','POST',{consent:true,notice_version:'p0-v1'});csrf=session.csrf_token;consented=true;deleted=false;adapter.profile=session.profile;try{localStorage.setItem(NOTICE,'p0-v1');}catch{/* Memory-only notice state remains valid. */}}
+  async function request(path,method='GET',body){
+    const version = generation;
+    const response=await fetch('/api'+path,{method,credentials:'same-origin',cache:'no-store',headers:{...(method!=='GET'?{'Content-Type':'application/json','X-CSRF-Token':csrf}:{})},...(method!=='GET'?{body:JSON.stringify(body??{})}:{})});
+    let payload;
+    try{payload=await response.json();}catch{throw new Error('统一资料服务暂不可用，请保留当前文字。');}
+    if (version !== generation || openedAuthVersion !== authVersion()) throw new Error('登录状态已更新，请使用当前会话。');
+    if(!response.ok){const error=new Error(payload.error?.message||'统一资料保存失败。');error.status=response.status;error.code=payload.error?.code;throw error;}
+    return payload;
+  }
+  async function ensureSession(){
+    if (csrf) return;
+    const existingAccount = accountMode();
+    const expected = adapter.account?.id;
+    if (!existingAccount && !consented && !marker() &&
+        !confirm('启用统一资料云保存后，你接下来主动修改的公共资料会保存在服务器，并供方向探索、岗位匹配、JD 分析和求职冲刺复用。旧资料不会自动上传；管理员仅在你预览并明确提交后可见。在线 AI 仅在轻量入口主动生成时调用。是否继续？')) {
+      throw new Error('本次修改仍保留在本页，尚未上传。');
+    }
+    const session=await request('/guest-session','POST',{consent:true,notice_version:'p0-v1',...(existingAccount?{existing_only:true}:{})});
+    if ((existingAccount && !session.account) || (session.account?.id !== expected)) throw new Error('登录状态已更新，请到统一资料页重新连接。');
+    setProfile(session.profile, session.account || null);
+    csrf=session.csrf_token;
+    consented=true;
+    deleted=false;
+    if (!session.account) try{localStorage.setItem(NOTICE,'p0-v1');}catch{}
+  }
   function known(path){const field=adapter.profile?.fields?.[path];if(field?.value===null&&field.source_type==='user_form')return '';return field?.value_state==='known'&&field.source_type!=='ai_inference'?field.value:null;}
   function localRecord(key) {
     try { return JSON.parse(localStorage.getItem(key)); }
@@ -40,9 +85,9 @@
     };
   }
   function readFields() {
-    const legacy = legacyFields(), fields = {};
+    const signedIn = accountMode(), legacy = signedIn ? {} : legacyFields(), fields = {};
     for (const path of fieldPaths) {
-      const stored = localRecord(LOCAL_FIELD + path);
+      const stored = signedIn ? null : localRecord(LOCAL_FIELD + path);
       const cloud = cloudField(path);
       if (changedFields.has(path)) fields[path] = userField(changedFields.get(path));
       else if (cloud) fields[path] = cloud;
@@ -58,6 +103,7 @@
     return fields;
   }
   function readLocalFields(includeLegacy = false) {
+    if (accountMode()) return {};
     const fields = {};
     const legacy = includeLegacy ? legacyFields() : {};
     for (const path of fieldPaths) {
@@ -74,7 +120,9 @@
     const work = queue.then(async () => {
       if (!adapter.profile || deleted) throw new Error('资料会话已失效，请重新连接统一资料。');
       if (!csrf) {
+        const expected = adapter.account?.id;
         const session = await request('/guest-session','POST',{consent:true,notice_version:'p0-v1',existing_only:true});
+        if (session.account?.id !== expected) throw new Error('登录状态已更新，请到统一资料页重新连接。');
         csrf = session.csrf_token;
       }
       adapter.profile = await request('/me/profile/ai-consent','POST',{consent:granted,notice_version:'career-ai-profile-v1'});
@@ -97,6 +145,7 @@
   }
   // Cache manual edits across guest-session expiry, and update any existing local copy.
   function syncLocalCopies() {
+    if (accountMode()) return;
     for (const path of fieldPaths) {
       const stored = localRecord(LOCAL_FIELD + path);
       const cloud = cloudField(path);
@@ -116,6 +165,7 @@
       await refresh();
       if (refreshError) throw refreshError;
     }
+    if (accountMode() && !adapter.profile) throw new Error('学生账号的资料会话暂不可用，请重新连接后再保存。');
     const pending = changedFields.has(path) ? changedFields.get(path) : undefined;
     changedFields.delete(path);
     let storage = 'local';
@@ -127,13 +177,14 @@
       }
       storage = 'cloud';
     }
-    try { storeLocal(path, value, storage === 'cloud' ? cloudField(path) : null); }
+    try { if (!accountMode()) storeLocal(path, value, storage === 'cloud' ? cloudField(path) : null); }
     catch (error) { if (storage === 'local') throw error; }
     persistPending();
     publish();
     return {storage};
   }
   function applyLegacy(){
+    if (accountMode()) return;
     try{
       if(typeof appData==='undefined'||!appData||typeof historyViewMode!=='undefined'&&historyViewMode)return;
       const value = path => {
@@ -162,12 +213,12 @@
     try {
       const profile = await request('/me/profile');
       if (deleted) return null;
-      adapter.profile = profile;
+      setProfile(profile);
       adapter.state = 'connected';
       consented = true;
       syncLocalCopies();
       let current;
-      try { current = sessionStorage.getItem(LAST); } catch { /* Optional current-task hint. */ }
+      try { current = sessionStorage.getItem(adapter.account ? 'careerP0Account:' + adapter.account.id + ':' + LAST : LAST); } catch { /* Optional current-task hint. */ }
       if (current) {
         try { adapter.currentIntake = await request(`/intakes/${encodeURIComponent(current)}`); }
         catch { adapter.currentIntake = null; }
@@ -176,7 +227,7 @@
       return adapter.profile;
     } catch (error) {
       if (error.status === 401 || error.code === 'STORAGE_NOT_CONFIGURED') {
-        adapter.profile = null;
+        setProfile(null);
         csrf = '';
         consented = false;
         adapter.state = error.code === 'STORAGE_NOT_CONFIGURED' ? 'storage_unavailable' :
@@ -193,8 +244,10 @@
   }
   function update(field_path,value,options={}){return updateMany([{field_path,value,...(options.confirm?{confirm:true}:{})}]);}
   function updateMany(patch) {
+    const expectedAccount = adapter.account?.id;
     const work = queue.then(async () => {
       if (deleted) throw new Error('云端资料已删除，请重新启用。');
+      if (expectedAccount !== adapter.account?.id || openedAuthVersion !== authVersion()) throw new Error('登录状态已更新，请使用当前会话。');
       await ensureSession();
       note('正在保存统一资料…');
       try {
@@ -214,6 +267,7 @@
     return work;
   }
   function restorePending() {
+    if (accountMode()) return;
     try {
       const entries = JSON.parse(sessionStorage.getItem(PENDING) || '[]');
       for (const [path,value] of entries) {
@@ -223,7 +277,7 @@
     } catch {}
   }
   function persistPending() {
-    if (!marker() && !consented) return;
+    if (accountMode() || !marker() && !consented) return;
     try {
       if (changedFields.size) sessionStorage.setItem(PENDING, JSON.stringify([...changedFields]));
       else sessionStorage.removeItem(PENDING);
@@ -232,7 +286,7 @@
   function schedule(field_path,value) {
     changedFields.set(field_path,value?.trim()||null);
     clearTimeout(timer);
-    if (!marker() && !consented) {
+    if (!accountMode() && !marker() && !consented) {
       try { storeLocal(field_path, changedFields.get(field_path)); }
       catch (error) { note(error.message, true); return; }
       note('本次修改已保存在当前浏览器。点击“启用统一资料云保存”后，可同步你刚修改的字段。');
@@ -265,6 +319,10 @@
     installBanner();
     restorePending();
     window.addEventListener('storage', event => {
+      if (event.key === AUTH_CHANGE && event.newValue !== openedAuthVersion) {
+        resetAccountView();
+        return;
+      }
       if (event.key?.startsWith(LOCAL_FIELD)) {
         if (!consented && !marker() && localStorage.getItem(event.key) === event.newValue) {
           changedFields.delete(event.key.slice(LOCAL_FIELD.length));
@@ -276,7 +334,7 @@
         refresh();
       }
       if (event.key === 'careerP0ProfileRevision') refresh();
-      if (event.key === NOTICE && event.newValue === null) {
+      if (event.key === NOTICE && event.newValue === null && !accountMode()) {
         deleted = true;
         consented = false;
         adapter.profile = null;
@@ -294,6 +352,10 @@
     document.querySelectorAll('[data-profile-field="education"]').forEach(button=>button.addEventListener('click',()=>{if(typeof historyViewMode!=='undefined'&&historyViewMode)return;schedule('education.degree',button.dataset.profileValue==='graduate'?'研究生':'本科');}));
     window.addEventListener('focus',()=>{if((adapter.profile||marker())&&!changedFields.size)refresh();});
     window.addEventListener('pageshow',event=>{
+      if (event.persisted && openedAuthVersion !== authVersion()) {
+        resetAccountView();
+        return;
+      }
       if(!event.persisted||flushing||(!consented&&!marker()))return;
       clearTimeout(timer);
       changedFields.clear();
@@ -304,6 +366,19 @@
       if(changedFields.size&&(profile||marker()))timer=setTimeout(flush,650);
       return profile;
     });
+  }
+  function resetAccountView() {
+    generation++;
+    deleted = true;
+    consented = false;
+    csrf = '';
+    setProfile(null);
+    adapter.state = 'loading';
+    adapter.currentIntake = null;
+    changedFields.clear();
+    clearTimeout(timer);
+    window.dispatchEvent(new CustomEvent('career-profile-updated', {detail:null}));
+    location.reload();
   }
   adapter.ready = document.readyState === 'loading'
     ? new Promise(resolve => document.addEventListener('DOMContentLoaded', () => resolve(bind()), {once:true}))

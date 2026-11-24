@@ -877,6 +877,70 @@ try {
     }
   });
 
+  await test('signed-in chat, notes and documents never load the guest or another account workspace', async () => {
+    const isolated = await browser.newContext();
+    const profileRead = Promise.withResolvers();
+    const ids = ['student-fixture-alpha', 'student-fixture-beta'];
+    const profile = id => ({ account: { id, username: id }, profile_revision: 0, fields: {} });
+    fixtureProfile = profile(ids[0]);
+    try {
+      await isolated.addInitScript(({ ids, chatKey, recordKey }) => {
+        if (localStorage.getItem('account-data-fixture')) return;
+        localStorage.setItem('account-data-fixture', 'seeded');
+        localStorage.setItem('careerP0AccountActive', 'yes');
+        for (const [owner, label] of [[null, '访客私有'], [ids[0], '账号甲私有'], [ids[1], '账号乙私有']]) {
+          const key = name => owner ? `careerAIAccount:${owner}:${name}` : name;
+          const at = '2026-11-18T10:00:00.000Z';
+          localStorage.setItem(key(chatKey), JSON.stringify({ version: 1, sessions: [{ id: owner || 'guest-fixture', title: label + '聊天', createdAt: at,
+            revision: 1, messages: [], draft: label + '草稿' }] }));
+          localStorage.setItem(key(recordKey), JSON.stringify([{ id: 'note', note: label + '笔记', createdAt: at }]));
+          localStorage.setItem(key('careerIntelligenceDocumentsV1'), JSON.stringify([{ id: 'doc', title: label + '附件', kind: 'text', text: label + '附件正文' }]));
+        }
+        localStorage.setItem('careerPredictor', JSON.stringify({ chatHistory:[{ role: 'user', content: '访客私有旧问答' }] }));
+      }, { ids, chatKey: CHAT_KEY, recordKey: RECORD_KEY });
+      let holding = true;
+      await isolated.route('**/api/me/profile', async route => {
+        if (holding) { holding = false; await profileRead.promise; }
+        await route.continue();
+      });
+      const chat = await isolated.newPage();
+      chat.on('pageerror', error => errors.push(error.stack || error.message));
+      await chat.goto(origin + '/index.html#intelligence', { waitUntil: 'domcontentloaded' });
+      await chat.getByText('正在读取个人资料…', { exact: true }).waitFor();
+      assert.equal(await chat.locator('.ci-session-title').count(), 0);
+      profileRead.resolve();
+      await chat.getByText('账号甲私有聊天', { exact: true }).click();
+      assert.equal(await chat.locator('#ciMessage').inputValue(), '账号甲私有草稿');
+      assert.match(await chat.locator('#ciDocuments').textContent(), /账号甲私有附件/);
+      assert.doesNotMatch(await chat.locator('#ciDocuments').textContent(), /账号乙私有|访客私有/);
+
+      const identityTab = await isolated.newPage();
+      await identityTab.goto(origin + '/start', { waitUntil: 'domcontentloaded' });
+      fixtureProfile = profile(ids[1]);
+      const refreshed = chat.waitForNavigation({ waitUntil: 'domcontentloaded' });
+      await identityTab.evaluate(() => localStorage.setItem('careerP0AuthChange', 'fixture-rotated'));
+      await refreshed;
+      await chat.getByText('账号乙私有聊天', { exact: true }).click();
+      assert.equal(await chat.locator('#ciMessage').inputValue(), '账号乙私有草稿');
+      assert.doesNotMatch(await chat.locator('#ciDocuments').textContent(), /账号甲私有|访客私有/);
+      await chat.locator('#ciShowRecords').click();
+      assert.match(await chat.locator('#ciMemoryList').textContent(), /账号乙私有笔记/);
+      assert.doesNotMatch(await chat.locator('#ciMemoryList').textContent(), /账号甲私有|访客私有/);
+      await chat.locator('#ciRecordsDialog [data-ci-close]').click();
+      await chat.locator('#ciShowSettings').click();
+      await chat.locator('#ciUseHistory').check();
+      const call = await send('请给我一个适合新生的方向探索建议。', chat);
+      const history = JSON.stringify(call.history);
+      assert.match(history, /账号乙私有笔记/);
+      assert.doesNotMatch(history, /账号甲私有|访客私有/);
+      assert.equal(await chat.evaluate(key => JSON.parse(localStorage.getItem(key)).sessions[0].draft, CHAT_KEY), '访客私有草稿');
+    } finally {
+      profileRead.resolve();
+      fixtureProfile = null;
+      await isolated.close();
+    }
+  });
+
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ passed: checks.length, browserErrors: errors, apiCalls: calls.length, providerCalls: providerCalls.length, model: 'controlled-http-fixture' }));
 } finally {

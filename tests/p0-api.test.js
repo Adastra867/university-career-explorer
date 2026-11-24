@@ -62,6 +62,103 @@ test('direct API: consent, owner isolation, CSRF, admin boundaries and private d
   assert.equal((await s.other.call('GET',`/admin/campaigns/${s.campaign.id}/qr.svg`)).status,404);
 });
 
+const studentSignup = (username = 'student-fixture') => ({
+  username, password: 'fixture-password-2026', consent: true, notice_version: 'p0-v1',
+});
+
+test('student registration syncs profile and drafts across devices and keeps accounts isolated', async t => {
+  const { a: browserA, client, store, router, generate } = await setup(t);
+  const browserB = client(), other = client();
+  const anonymousProfile = await browserA.call('GET', '/me/profile');
+  const legacy = await browserA.call('PATCH', '/me/profile', {
+    expected_revision: anonymousProfile.body.profile_revision,
+    patch: [{ field_path: 'education.major', value: '原访客合成专业' }],
+  });
+  assert.equal(legacy.status, 200);
+  const rejected = await browserB.call('POST', '/accounts/register', studentSignup(), { Origin: 'https://cross-site.invalid' });
+  assert.equal(rejected.body.error.code, 'ORIGIN_REJECTED');
+  const signup = await browserA.call('POST', '/accounts/register', studentSignup('Student-Fixture'));
+  assert.equal(signup.status, 201);
+  const { account, csrf_token, profile, retention_days } = signup.body;
+  assert.equal(account.username, 'student-fixture');
+  assert.equal(retention_days, null);
+  assert.equal(profile.fields['education.major'].value, null);
+  assert.equal(signup.body.guest_id, account.id);
+  assert.match(signup.headers.get('set-cookie'), /^career_account=.+; Path=\/; .*HttpOnly; SameSite=Lax/);
+  assert.notEqual(store.get('SELECT password_hash FROM student_accounts WHERE owner_id=?', account.id).password_hash, studentSignup().password);
+  assert.equal((await browserB.call('POST', '/accounts/register', studentSignup())).status, 409);
+  const updated = await browserA.call('PATCH', '/me/profile', {
+    expected_revision: profile.profile_revision, patch: [{ field_path: 'education.major', value: '学生甲合成专业' }],
+  });
+  assert.equal(updated.status, 200);
+  assert.deepEqual(updated.body.account, account);
+  const draft = await browserA.call('POST', '/intakes', { task_type: 'explore_direction', input: '测试草稿' });
+  assert.equal(draft.status, 201);
+  const login = await browserB.call('POST', '/accounts/login', studentSignup());
+  assert.equal(login.status, 200);
+  assert.deepEqual(login.body.account, account);
+  assert.notEqual(login.body.csrf_token, csrf_token);
+  assert.equal(login.body.profile.fields['education.major'].value, '学生甲合成专业');
+  assert.equal((await browserB.call('GET', `/intakes/${draft.body.id}`)).status, 200);
+  assert.ok((await generate(browserB, draft.body)).result);
+  assert.ok((await browserA.call('GET', `/intakes/${draft.body.id}`)).body.result);
+  assert.deepEqual((await browserB.call('POST', '/guest-session', { existing_only: true })).body.account, account);
+  assert.equal((await browserB.call('PATCH', '/me/profile', {
+    expected_revision: updated.body.profile_revision,
+    patch: [{ field_path: 'education.major', value: '应拒绝' }],
+  }, { 'X-CSRF-Token': csrf_token })).status, 403);
+  assert.equal((await other.call('POST', '/accounts/register', studentSignup('other-student'))).status, 201);
+  assert.equal((await other.call('GET', '/me/profile')).body.fields['education.major'].value, null);
+  assert.equal((await other.call('GET', `/intakes/${draft.body.id}`)).status, 404);
+  assert.equal((await other.call('GET', '/admin/submissions')).status, 401);
+  const signedInCookie = signup.headers.get('set-cookie').split(';')[0];
+  const aiProfile = router.locals.resolveProfile({ headers: { cookie: signedInCookie } });
+  assert.equal(aiProfile.profile.fields['education.major'].value, '学生甲合成专业');
+  assert.equal(aiProfile.consent, false);
+  assert.equal(aiProfile.profile.account, undefined);
+  assert.equal((await browserA.call('POST', '/accounts/logout', {}, { 'X-CSRF-Token': login.body.csrf_token })).status, 403);
+  assert.equal((await browserA.call('POST', '/accounts/logout', {})).status, 200);
+  assert.equal((await browserA.call('GET', '/account-session')).status, 401);
+  assert.equal((await browserB.call('GET', '/account-session')).status, 200);
+  assert.equal((await browserA.call('GET', '/me/profile')).body.fields['education.major'].value, '原访客合成专业');
+});
+
+test('student session expiry and guest cleanup preserve account data until account deletion', async t => {
+  let time = Date.parse('2026-01-01T00:00:00Z');
+  const { a: browserA, client, router, store } = await setup(t, {
+    now: () => time, env: { CAREER_SESSION_DAYS: '1', CAREER_RETENTION_DAYS: '1' },
+  });
+  const signup = await browserA.call('POST', '/accounts/register', studentSignup());
+  const { account, profile } = signup.body;
+  assert.equal((await browserA.call('PATCH', '/me/profile', {
+    expected_revision: profile.profile_revision, patch: [{ field_path: 'education.major', value: '可恢复的合成资料' }],
+  })).status, 200);
+  time += 2 * 86400000;
+  router.locals.cleanup();
+  assert.equal(store.get('SELECT COUNT(*) AS count FROM guests').count, 1);
+  assert.equal(store.get('SELECT COUNT(*) AS count FROM student_sessions').count, 0);
+  assert.equal((await browserA.call('GET', '/me/profile')).body.error.code, 'SESSION_EXPIRED');
+  const browserB = client();
+  const restored = await browserB.call('POST', '/accounts/login', studentSignup());
+  assert.deepEqual(restored.body.account, account);
+  assert.equal(restored.body.profile.fields['education.major'].value, '可恢复的合成资料');
+  assert.equal((await browserA.call('POST', '/accounts/login', studentSignup())).status, 200);
+  assert.equal((await browserB.call('DELETE', '/me/data', {})).status, 200);
+  assert.equal((await browserA.call('GET', '/account-session')).status, 401);
+  assert.equal((await browserA.call('POST', '/accounts/login', studentSignup())).body.error.code, 'INVALID_CREDENTIALS');
+  assert.equal(store.get('SELECT 1 FROM profiles WHERE owner_id=?', account.id), undefined);
+  assert.equal(store.get('SELECT COUNT(*) AS count FROM student_sessions').count, 0);
+});
+
+test('student registration can be closed without affecting guest and admin sessions', async t => {
+  const { a, admin, client } = await setup(t, { env: { CAREER_ALLOW_SELF_REGISTRATION: 'false' } });
+  const anonymous = client();
+  assert.equal((await anonymous.call('GET', '/career/status')).body.account_registration, false);
+  assert.equal((await anonymous.call('POST', '/accounts/register', studentSignup())).body.error.code, 'REGISTRATION_DISABLED');
+  assert.equal((await a.call('GET', '/me/profile')).status, 200);
+  assert.equal((await admin.call('GET', '/admin/session')).status, 200);
+});
+
 test('online AI profile consent is separate from storage consent and resolves only the authenticated owner', async t => {
   const { a, b, router, store, client } = await setup(t);
   const before = (await a.call('GET', '/me/profile')).body;

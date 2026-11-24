@@ -11,7 +11,7 @@
 | `/job-search.html` | 按关键词搜索岗位，查看岗位详情和匹配依据。实时岗位检索依赖服务端搜索配置。 |
 | `/career-prep.html` | 简历诊断、行业和岗位笔试、模拟面试及练习记录下载。练习由浏览器本地规则生成。 |
 | `/trees` | 创建和编辑职业树，在画布中组织节点、查看路线和比较选择。 |
-| `/start`、`/admin` | 轻量职业建议、统一资料、访客草稿、活动提交与管理。生产环境需要持久存储。 |
+| `/start`、`/admin` | 学生注册与登录、按账号恢复统一资料、轻量职业建议、任务草稿、活动提交与管理。公网账号可将资料保存到管理员电脑。 |
 
 ## 本地运行
 
@@ -49,7 +49,7 @@ GitHub `main` 提供 Render Web Service 的构建源码。发布前可运行 `no
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\deploy.ps1
 ```
 
-免费 Render 服务的文件系统是临时的。未配置持久存储时，生产环境提供方向探索、匹配、求职练习和职业树等功能，云端问卷收集与统一资料同步会显示服务不可用。 [职途星轨公网入口](https://university-career-explorer.onrender.com)
+免费 Render 服务的文件系统是临时的。启用公网账号及统一资料同步时，可把 SQLite 数据库留在管理员电脑，由 Render 经认证的 HTTPS 隧道访问。未连接资料服务时，方向探索、匹配、求职练习和职业树等功能仍可使用。 [部署说明](docs/DEPLOYMENT.md)
 
 职业规划 AI 使用服务端 `JOURNEY_AI_*` 配置，支持 `.env` 中的 `JOURNEY_AI_API_KEY` 和 `JOURNEY_AI_MODEL`，DeepSeek 配置示例见 [Journey 环境变量](journey/.env.example)。在问答中保存或补充个人资料后，新对话会复用最新内容，也可在问答设置中关闭。首次使用其他页面的已有资料时，点击“参考已保存的个人资料”即可启用。个人资料保存在当前浏览器，连接统一资料后修改也会保存到服务器。历史记录和文件内容由用户勾选，联网搜索单独使用公开搜索词。
 

@@ -116,9 +116,12 @@
   class CareerChatStore {
     static KEY = KEY;
     static create(options) { return new CareerChatStore(options); }
+    static storageKey(key, accountId) {
+      return accountId ? `careerAIAccount:${encodeURIComponent(accountId)}:${key}` : key;
+    }
 
-    constructor({ storage, onStatus = () => {} } = {}) {
-      this.key = KEY;
+    constructor({ storage, accountId, onStatus = () => {} } = {}) {
+      this.key = CareerChatStore.storageKey(KEY, accountId);
       this.onStatus = onStatus;
       this.sessions = new Map();
       this.pending = new Map();
@@ -140,7 +143,7 @@
 
     read() {
       if (!this.storage || typeof this.storage.getItem !== 'function') throw problem('CHAT_STORAGE_UNAVAILABLE', '此浏览器暂时无法读取聊天记录。');
-      return decode(this.storage.getItem(KEY));
+      return decode(this.storage.getItem(this.key));
     }
 
     adopt(sessions, { restoring = false, savedId } = {}) {
@@ -194,7 +197,7 @@
         const safe = persistentCopy(next);
         const encoded = JSON.stringify({ version: 1, sessions: [...latest.filter(session => session.id !== draft.id), safe] });
         decode(encoded);
-        this.storage.setItem(KEY, encoded);
+        this.storage.setItem(this.key, encoded);
         this.pending.delete(draft.id);
         this.adopt([...latest.filter(session => session.id !== draft.id), next], { savedId: next.id });
         this.error = null;
@@ -216,7 +219,7 @@
         const latest = this.read();
         const current = latest.find(item => item.id === id);
         if (current && current.revision !== session.revision) throw problem('CHAT_SESSION_CONFLICT', '此对话已在另一页更新，请重新载入后再删除。');
-        if (current) this.storage.setItem(KEY, JSON.stringify({ version: 1, sessions: latest.filter(item => item.id !== id) }));
+        if (current) this.storage.setItem(this.key, JSON.stringify({ version: 1, sessions: latest.filter(item => item.id !== id) }));
         this.pending.delete(id);
         this.adopt(latest.filter(item => item.id !== id));
         this.error = null;

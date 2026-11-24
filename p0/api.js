@@ -1,13 +1,15 @@
 import express from 'express';
 import QRCode from 'qrcode';
 import { emptyProfile, FIELD_PATHS, TASK_TYPES, PROFILE_DEPENDENCIES, aiStatus, analyze as defaultAnalyze } from './analysis.js';
-import { openCareerStore, check, failure, digest, id, opaque, stable, passwordMatches } from './store.js';
+import { openCareerStore, check, failure, digest, id, opaque, stable, passwordHash, passwordMatches } from './store.js';
 
 export const NOTICE_VERSION = 'p0-v1';
 export const AI_PROFILE_NOTICE_VERSION = 'career-ai-profile-v1';
 const FIELD_SET = new Set(FIELD_PATHS);
 const QUESTION_FIELDS = new Set([...FIELD_PATHS,'experience.personal_action','task.compare_options','task.priority','task.target_role','task.constraints']);
 const DEPENDENCIES = PROFILE_DEPENDENCIES;
+const DUMMY_PASSWORD_HASH = `${'0'.repeat(32)}:${'0'.repeat(128)}`;
+const STUDENT_COOKIE = 'career_account';
 const text = (value, max = 20000, allowEmpty = true) => { check(typeof value === 'string' && value.length <= max && (allowEmpty || value.trim())); return value.trim(); };
 const key = value => { check(typeof value === 'string' && /^[\w-]{8,120}$/.test(value), '缺少有效的请求标识。'); return value; };
 const parse = value => JSON.parse(value);
@@ -23,16 +25,40 @@ export function createCareerRouter(options = {}) {
   const future = ms => new Date(now() + ms).toISOString();
   const limits = new Map(), activeTurns = new Map();
   const secure = env.NODE_ENV === 'production';
+  const accountRegistration = env.CAREER_ALLOW_SELF_REGISTRATION !== 'false';
   const ttl = Math.max(1, Number(env.CAREER_SESSION_DAYS) || 30) * 86400000;
   const setCookie = (res, name, token, maxAge) => res.cookie(name, token, { httpOnly: true, secure, sameSite: 'lax', path: '/', maxAge });
   const clearCookie = (res, name) => res.clearCookie(name, { httpOnly: true, secure, sameSite: 'lax', path: '/' });
   function rate(name, limit, window = 60000) {
+    const time = now();
     const last = limits.get(name);
-    if (!last || last.until <= now()) { limits.set(name, { count: 1, until: now() + window }); return; }
-    check(++last.count <= limit, '操作过于频繁，请稍后重试。', 'RATE_LIMITED', 429);
-    if (limits.size > 5000) for (const [k,v] of limits) if (v.until <= now()) limits.delete(k);
+    if (last?.until > time) {
+      check(++last.count <= limit, '操作过于频繁，请稍后重试。', 'RATE_LIMITED', 429);
+      return;
+    }
+    if (!last && limits.size >= 5000) {
+      for (const [key, value] of limits) if (value.until <= time) limits.delete(key);
+      check(limits.size < 5000, '操作过于频繁，请稍后重试。', 'RATE_LIMITED', 429);
+    }
+    limits.set(name, { count: 1, until: time + window });
+  }
+  function student(req) {
+    const token = cookie(req, STUDENT_COOKIE);
+    if (!token) return null;
+    const row = store.get(`SELECT a.owner_id AS id, a.username, s.csrf
+      FROM student_sessions s JOIN student_accounts a ON s.owner_id=a.owner_id
+      WHERE s.token_hash=? AND s.expires_at>?`, digest(token), stamp());
+    check(row, '学生登录已失效，请重新登录。', 'SESSION_EXPIRED', 401);
+    return { ...row, account: { id: row.id, username: row.username } };
+  }
+  function requireStudent(req) {
+    const account = student(req);
+    check(account, '请先登录学生账号。', 'UNAUTHENTICATED', 401);
+    return account;
   }
   function guest(req) {
+    const signedIn = student(req);
+    if (signedIn) return signedIn;
     const row = store.get('SELECT * FROM guests WHERE token_hash=? AND expires_at>?', digest(cookie(req, 'career_guest') || ''), stamp());
     check(row, '请先确认资料处理说明并建立访客会话。', 'UNAUTHENTICATED', 401); return row;
   }
@@ -42,6 +68,32 @@ export function createCareerRouter(options = {}) {
   }
   function csrf(req, identity) { check(req.headers['x-csrf-token'] === identity.csrf, '会话校验失败，请刷新后重试。', 'CSRF_REJECTED', 403); }
   function profile(owner) { return parse(store.get('SELECT data FROM profiles WHERE owner_id=?', owner).data); }
+  function profileResponse(g, current = profile(g.id)) {
+    return g.account ? { ...current, account: g.account } : current;
+  }
+  function sessionResponse(g) {
+    return {
+      ...(g.account ? { account: g.account } : {}),
+      guest_id: g.id, csrf_token: g.csrf, profile: profileResponse(g),
+      retention_days: g.account ? null : days, ai_configured: aiStatus(env).configured,
+    };
+  }
+  function studentCredentials(body, minPasswordLength) {
+    const username = text(body?.username, 48, false).normalize('NFKC').toLowerCase();
+    check(/^[a-z0-9][a-z0-9._-]{2,47}$/.test(username), '账号须为 3–48 个字母、数字、点、短横线或下划线，以字母或数字开头。');
+    const password = body?.password;
+    check(typeof password === 'string' && password.length >= minPasswordLength && password.length <= 200,
+      minPasswordLength === 12 ? '密码须为 12–200 个字符。' : '请输入密码。');
+    return { username, password };
+  }
+  function createStudentSession(req, ownerId, username) {
+    // Replacing the cookie on this device must not sign out another device.
+    const previous = cookie(req, STUDENT_COOKIE);
+    if (previous) store.run('DELETE FROM student_sessions WHERE token_hash=?', digest(previous));
+    const token = opaque(), csrfToken = opaque();
+    store.run('INSERT INTO student_sessions VALUES(?,?,?,?)', digest(token), ownerId, csrfToken, future(ttl));
+    return { token, id: ownerId, csrf: csrfToken, account: { id: ownerId, username } };
+  }
   function intake(owner, intakeId) { const row = store.get('SELECT * FROM intakes WHERE id=? AND owner_id=?', intakeId, owner); check(row, '记录不存在。', 'NOT_FOUND',404); return { row, data: parse(row.data) }; }
   function saveIntake(owner, data) {
     const changed = store.run('UPDATE intakes SET data=?,updated_at=? WHERE id=? AND owner_id=?', JSON.stringify(data), stamp(), data.id, owner).changes;
@@ -83,7 +135,9 @@ export function createCareerRouter(options = {}) {
   }
   function cleanup() {
     store.transaction(() => {
-      store.run('DELETE FROM guests WHERE created_at<?', new Date(now() - days * 86400000).toISOString());
+      store.run(`DELETE FROM guests WHERE created_at<?
+        AND NOT EXISTS (SELECT 1 FROM student_accounts WHERE owner_id=guests.id)`, new Date(now() - days * 86400000).toISOString());
+      store.run('DELETE FROM student_sessions WHERE expires_at<=?', stamp());
       store.run('DELETE FROM admin_sessions WHERE expires_at<=?', stamp());
       store.run('DELETE FROM previews WHERE expires_at<=?', stamp());
     });
@@ -98,7 +152,7 @@ export function createCareerRouter(options = {}) {
       if (error.status !== 401) throw error;
       return {
         authenticated: false, consent: false, profile: null, source: 'sqlite',
-        status: cookie(req, 'career_guest') ? 'session_expired' : 'not_connected',
+        status: cookie(req, STUDENT_COOKIE) || cookie(req, 'career_guest') ? 'session_expired' : 'not_connected',
       };
     }
     const currentProfile = profile(currentGuest.id);
@@ -120,11 +174,58 @@ export function createCareerRouter(options = {}) {
     }
     next();
   });
-  router.get('/career/status', (_req,res) => res.json({schema_version:1,notice_version:NOTICE_VERSION,retention_days:days,storage:'sqlite',ai_configured:aiStatus(env).configured}));
+  router.get('/career/status', (_req,res) => res.json({schema_version:1,notice_version:NOTICE_VERSION,retention_days:days,storage:'sqlite',ai_configured:aiStatus(env).configured,account_registration:accountRegistration}));
+  router.get('/account-session', (req, res) => res.json(sessionResponse(requireStudent(req))));
+  router.post('/accounts/register', (req, res) => {
+    check(accountRegistration, '当前未开放学生账号注册。', 'REGISTRATION_DISABLED', 403);
+    rate(`student-registration:${req.ip}`, 10, 10 * 60000);
+    check(req.body?.consent === true && req.body.notice_version === NOTICE_VERSION,
+      '请先阅读并确认资料处理说明。', 'NOTICE_REQUIRED');
+    const { username, password } = studentCredentials(req.body, 12);
+    const session = store.transaction(() => {
+      check(!store.get('SELECT 1 FROM student_accounts WHERE username=?', username), '这个账号名已被使用。', 'USERNAME_TAKEN', 409);
+      const owner = id('student');
+      // Keep existing owner references intact. Account owners cannot authenticate
+      // with a guest token and are excluded from anonymous guest retention.
+      store.run('INSERT INTO guests VALUES(?,?,?,?,?,?)', owner, digest(opaque()), opaque(), stamp(), stamp(), NOTICE_VERSION);
+      store.run('INSERT INTO student_accounts VALUES(?,?,?)', owner, username, passwordHash(password));
+      store.run('INSERT INTO profiles VALUES(?,?)', owner, JSON.stringify(emptyProfile()));
+      return createStudentSession(req, owner, username);
+    });
+    setCookie(res, STUDENT_COOKIE, session.token, ttl);
+    res.status(201).json(sessionResponse(session));
+  });
+  router.post('/accounts/login', (req, res) => {
+    rate(`student-login-ip:${req.ip}`, 40);
+    const { username, password } = studentCredentials(req.body, 1);
+    const loginKey = `student-login-user:${username}`;
+    rate(loginKey, 10, 15 * 60000);
+    const account = store.get('SELECT owner_id,password_hash FROM student_accounts WHERE username=?', username);
+    const valid = passwordMatches(password, account?.password_hash || DUMMY_PASSWORD_HASH);
+    check(account && valid, '账号或密码不正确。', 'INVALID_CREDENTIALS', 401);
+    limits.delete(loginKey);
+    const session = store.transaction(() => createStudentSession(req, account.owner_id, username));
+    setCookie(res, STUDENT_COOKIE, session.token, ttl);
+    res.json(sessionResponse(session));
+  });
+  router.post('/accounts/logout', (req, res) => {
+    const account = requireStudent(req);
+    csrf(req, account);
+    store.run('DELETE FROM student_sessions WHERE token_hash=?', digest(cookie(req, STUDENT_COOKIE)));
+    clearCookie(res, STUDENT_COOKIE);
+    res.json({ logged_out: true });
+  });
   router.post('/guest-session', (req,res) => {
     rate(`guest:${req.ip}`,60);
     let g;
-    try { g = guest(req); } catch { /* Establish only after explicit notice consent. */ }
+    try { g = guest(req); }
+    catch (error) {
+      if (error.status !== 401) throw error;
+      if (cookie(req, STUDENT_COOKIE)) {
+        clearCookie(res, STUDENT_COOKIE);
+        throw error;
+      }
+    }
     if (!g) {
       if (req.body?.existing_only === true) {
         throw failure(401, cookie(req,'career_guest') ? 'SESSION_EXPIRED' : 'UNAUTHENTICATED',
@@ -137,10 +238,10 @@ export function createCareerRouter(options = {}) {
       store.transaction(() => { store.run('INSERT INTO guests VALUES(?,?,?,?,?,?)',g.id,g.token_hash,g.csrf,g.created_at,g.expires_at,g.notice_version); store.run('INSERT INTO profiles VALUES(?,?)',g.id,JSON.stringify(emptyProfile())); });
       setCookie(res,'career_guest',token,ttl);
     }
-    res.json({guest_id:g.id,csrf_token:g.csrf,profile:profile(g.id),retention_days:days,ai_configured:aiStatus(env).configured});
+    res.json(sessionResponse(g));
   });
   router.get('/campaigns/:slug/public',(req,res) => res.json(publicCampaign(campaign(req.params.slug))));
-  router.get('/me/profile',(req,res) => res.json(profile(guest(req).id)));
+  router.get('/me/profile',(req,res) => res.json(profileResponse(guest(req))));
   router.post('/me/profile/ai-consent', (req, res) => {
     const currentGuest = guest(req);
     csrf(req, currentGuest);
@@ -157,7 +258,7 @@ export function createCareerRouter(options = {}) {
       store.run('UPDATE profiles SET data=? WHERE owner_id=?', JSON.stringify(current), currentGuest.id);
       return current;
     });
-    res.json(next);
+    res.json(profileResponse(currentGuest, next));
   });
   router.patch('/me/profile',(req,res) => {
     const g=guest(req); csrf(req,g);
@@ -174,7 +275,7 @@ export function createCareerRouter(options = {}) {
         p.fields[patch.field_path] = changed ? {value,value_state:value === null ? 'unknown':'known',source_type:'user_form',source_refs:[{source_id:id('edit'),quote:value ?? ''}],previous_source_refs:old.source_refs,confirmation_state:'corrected',updated_at:stamp()} : {...old,confirmation_state:patch.confirm === true ? 'confirmed':old.confirmation_state,updated_at:stamp()};
       }
       p.profile_revision++; saveProfile(g.id,p,previous); return p;
-    }); res.json(next);
+    }); res.json(profileResponse(g, next));
   });
   router.post('/me/profile/import',(req,res) => {
     const g=guest(req); csrf(req,g); const importId=key(req.body.import_id), fingerprint=digest(req.body.records);
@@ -192,7 +293,7 @@ export function createCareerRouter(options = {}) {
         p.fields[record.field_path]={value,value_state:'known',source_type:'legacy_import',source_refs:[{source_id:`legacy:${record.source_key}:${digest(value).slice(0,12)}`,quote:value,imported_at:stamp(),source_version:'legacy-v1'}],confirmation_state:'unconfirmed',updated_at:stamp()};
       }
       p.profile_revision++; saveProfile(g.id,p,previous); store.run('INSERT INTO imports VALUES(?,?,?)',g.id,importId,fingerprint); return {...p,conflicts};
-    }); res.json(out);
+    }); res.json(profileResponse(g, out));
   });
   router.get('/intakes',(req,res) => {const g=guest(req); res.json({items:store.all('SELECT data FROM intakes WHERE owner_id=? ORDER BY updated_at DESC',g.id).map(r=>view(parse(r.data)))});});
   router.post('/intakes',(req,res) => {
@@ -250,7 +351,7 @@ export function createCareerRouter(options = {}) {
         const p=profile(g.id), usedValues=values(p,before.task_type);
         const analysis=await analyze({...before,sources,profile:p,force_result:!!before.finished_questions || before.question_count>=2}, {env});
         return store.transaction(() => {
-          check(store.get('SELECT 1 FROM guests WHERE id=? AND expires_at>?',g.id,stamp()),'会话已失效。','UNAUTHENTICATED',401);
+          check(guest(req).id===g.id,'会话已失效。','UNAUTHENTICATED',401);
           const {data}=intake(g.id,before.id);
           if(data.input_revision!==before.input_revision || stable(values(profile(g.id),data.task_type))!==stable(usedValues)) {
             const response={...view(data),error:{code:'STALE_ANALYSIS',message:'分析期间资料已改变，请重新分析。'}};
@@ -312,12 +413,12 @@ export function createCareerRouter(options = {}) {
     const out=store.transaction(()=>{const row=store.get('SELECT * FROM submissions WHERE id=? AND owner_id=?',req.params.id,g.id);check(row,'记录不存在。','NOT_FOUND',404);store.run("UPDATE submissions SET status='withdrawn',snapshot=NULL,withdrawn_at=? WHERE owner_id=? AND chain_id=?",stamp(),g.id,row.chain_id);return store.get('SELECT * FROM submissions WHERE id=?',row.id);});
     store.db.exec('PRAGMA wal_checkpoint(TRUNCATE)');res.json(receipt(out));
   });
-  router.delete('/me/data',(req,res)=>{const g=guest(req);csrf(req,g);store.transaction(()=>store.run('DELETE FROM guests WHERE id=?',g.id));store.db.exec('PRAGMA wal_checkpoint(TRUNCATE)');clearCookie(res,'career_guest');res.json({deleted:true});});
+  router.delete('/me/data',(req,res)=>{const g=guest(req);csrf(req,g);store.transaction(()=>store.run('DELETE FROM guests WHERE id=?',g.id));store.db.exec('PRAGMA wal_checkpoint(TRUNCATE)');clearCookie(res,g.account?STUDENT_COOKIE:'career_guest');res.json({deleted:true});});
 
   router.post('/admin/login',(req,res)=>{
     rate(`login:${req.ip}`,8,15*60000);const username=text(req.body.username,80,false);check(typeof req.body.password==='string' && req.body.password.length>0 && req.body.password.length<=200);const password=req.body.password;
     const a=store.get('SELECT * FROM admins WHERE username=?',username);
-    const valid=passwordMatches(password,a?.password_hash || '00000000000000000000000000000000:00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000');
+    const valid=passwordMatches(password,a?.password_hash || DUMMY_PASSWORD_HASH);
     check(a && valid,'账号或密码不正确。','INVALID_CREDENTIALS',401);
     const token=opaque(),csrfToken=opaque();store.run('INSERT INTO admin_sessions VALUES(?,?,?,?)',digest(token),a.id,csrfToken,future(8*3600000));setCookie(res,'career_admin',token,8*3600000);res.json({username:a.username,csrf_token:csrfToken});
   });
@@ -359,6 +460,7 @@ export function createCareerRouter(options = {}) {
     res.json({...receipt(row),snapshot:parse(row.snapshot),history});
   });
   router.use((error,_req,res,_next)=>{
+    if (error.type === 'entity.parse.failed') return res.status(400).json({error:{code:'INVALID_JSON',message:'提交的 JSON 格式不正确。'}});
     const databaseError=String(error?.code || '').startsWith('SQLITE') || /database|sqlite/i.test(error?.message || '');
     const status=error.status || (databaseError?503:500);
     res.status(status).json({error:{code:error.code && !databaseError?error.code:databaseError?'DATABASE_UNAVAILABLE':'INTERNAL_ERROR',message:status<500 && error.message?error.message:databaseError?'资料存储暂不可用，输入仍保留在页面，请稍后重试。':'服务暂不可用，请保留输入后重试。'}});
