@@ -51,6 +51,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\deploy.ps1
 
 免费 Render 服务的文件系统是临时的。启用公网账号及统一资料同步时，可把 SQLite 数据库留在管理员电脑，由 Render 经认证的 HTTPS 隧道访问。未连接资料服务时，方向探索、匹配、求职练习和职业树等功能仍可使用。 [部署说明](docs/DEPLOYMENT.md)
 
+Windows 资料服务器的启动、状态检查及登录自启命令见 [本机服务器说明](docs/LOCAL_SERVER.md)。部署后运行 `node scripts/verify-local-storage.mjs`，用合成账号核验公网保存、跨会话恢复和本机 SQLite 落盘；验收结束会删除测试账号。
+
 职业规划 AI 使用服务端 `JOURNEY_AI_*` 配置，支持 `.env` 中的 `JOURNEY_AI_API_KEY` 和 `JOURNEY_AI_MODEL`，DeepSeek 配置示例见 [Journey 环境变量](journey/.env.example)。在问答中保存或补充个人资料后，新对话会复用最新内容，也可在问答设置中关闭。首次使用其他页面的已有资料时，点击“参考已保存的个人资料”即可启用。个人资料保存在当前浏览器，连接统一资料后修改也会保存到服务器。历史记录和文件内容由用户勾选，联网搜索单独使用公开搜索词。
 
 ## 开发协作
